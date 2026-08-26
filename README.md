@@ -11,8 +11,10 @@ Daykeeper administrative or Chatwoot credentials.
 npm install @skyporch/daykeeper-web
 ```
 
-The package provides ESM, CommonJS, and TypeScript declarations and works in
-modern browsers and other Fetch API runtimes.
+The package provides ESM, CommonJS, and TypeScript declarations for modern
+browsers. React Native applications must use
+`@skyporch/daykeeper-react-native`, whose runtime behavior and Metro exports are
+tested separately.
 
 ## Use
 
