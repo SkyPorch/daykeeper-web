@@ -36,9 +36,13 @@ test("fetches a fresh customer token and preserves a gateway path", async () => 
 });
 
 test("exposes stable gateway errors without including the token", async () => {
+  const refreshRequests: boolean[] = [];
   const client = createDaykeeperWebClient({
     baseUrl: "https://support.example.com",
-    getAccessToken: () => "do-not-leak",
+    getAccessToken: ({ forceRefresh }) => {
+      refreshRequests.push(forceRefresh);
+      return "do-not-leak";
+    },
     fetch: async () =>
       Response.json({ error: "expired_token" }, { status: 401 }),
   });
@@ -50,6 +54,31 @@ test("exposes stable gateway errors without including the token", async () => {
     assert(!JSON.stringify(error).includes("do-not-leak"));
     return true;
   });
+  assert.deepEqual(refreshRequests, [false, true]);
+});
+
+test("refreshes once after a stale token is rejected", async () => {
+  const refreshRequests: boolean[] = [];
+  const authorization: Array<string | null> = [];
+  const client = createDaykeeperWebClient({
+    baseUrl: "https://support.example.com/support-api",
+    getAccessToken: ({ forceRefresh }) => {
+      refreshRequests.push(forceRefresh);
+      return forceRefresh ? "fresh-token" : "stale-token";
+    },
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      authorization.push(request.headers.get("authorization"));
+      if (authorization.length === 1) {
+        return Response.json({ error: "expired_token" }, { status: 401 });
+      }
+      return Response.json({ unreadCount: 2 });
+    },
+  });
+
+  assert.deepEqual(await client.getUnread(), { unreadCount: 2 });
+  assert.deepEqual(refreshRequests, [false, true]);
+  assert.deepEqual(authorization, ["Bearer stale-token", "Bearer fresh-token"]);
 });
 
 test("sends trimmed messages and validates conversation ids", async () => {

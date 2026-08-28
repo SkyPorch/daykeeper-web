@@ -15,7 +15,14 @@ const MAX_RESPONSE_BYTES = 1024 * 1024;
 const MAX_TOKEN_LENGTH = 16_384;
 const MAX_MESSAGE_LENGTH = 16_000;
 
-export type DaykeeperWebTokenProvider = () => string | Promise<string>;
+export interface DaykeeperWebTokenProviderContext {
+  /** True only after the first access token was rejected with HTTP 401. */
+  forceRefresh: boolean;
+}
+
+export type DaykeeperWebTokenProvider = (
+  context: DaykeeperWebTokenProviderContext,
+) => string | Promise<string>;
 
 export interface DaykeeperWebClientOptions {
   baseUrl: string;
@@ -140,15 +147,6 @@ export class DaykeeperWebClient {
       signal?: AbortSignal;
     } = {},
   ): Promise<ResponseBody> {
-    const token = validateToken(await this.#getAccessToken());
-    const headers = new Headers({
-      accept: "application/json",
-      authorization: `Bearer ${token}`,
-    });
-    if (options.body !== undefined) {
-      headers.set("content-type", "application/json");
-    }
-
     const timeoutController = new AbortController();
     let timedOut = false;
     const timeout = setTimeout(() => {
@@ -161,61 +159,76 @@ export class DaykeeperWebClient {
       options.signal?.addEventListener("abort", onCallerAbort, { once: true });
 
     try {
-      let response: Response;
-      try {
-        response = await this.#fetch(`${this.#baseUrl}${path}`, {
-          method: options.method ?? "GET",
-          body:
-            options.body === undefined
-              ? undefined
-              : JSON.stringify(options.body),
-          headers,
-          signal: timeoutController.signal,
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const token = validateToken(
+          await this.#getAccessToken({ forceRefresh: attempt === 1 }),
+        );
+        const headers = new Headers({
+          accept: "application/json",
+          authorization: `Bearer ${token}`,
         });
-      } catch {
-        if (timedOut) {
+        if (options.body !== undefined) {
+          headers.set("content-type", "application/json");
+        }
+
+        let response: Response;
+        try {
+          response = await this.#fetch(`${this.#baseUrl}${path}`, {
+            method: options.method ?? "GET",
+            body:
+              options.body === undefined
+                ? undefined
+                : JSON.stringify(options.body),
+            headers,
+            signal: timeoutController.signal,
+          });
+        } catch {
+          if (timedOut) {
+            throw new DaykeeperWebTransportError({
+              code: "REQUEST_TIMEOUT",
+              message: `The Daykeeper request exceeded ${this.#timeoutMs}ms`,
+              retryable: true,
+            });
+          }
+          if (options.signal?.aborted) {
+            throw new DaykeeperWebTransportError({
+              code: "REQUEST_ABORTED",
+              message: "The Daykeeper request was aborted",
+            });
+          }
           throw new DaykeeperWebTransportError({
-            code: "REQUEST_TIMEOUT",
-            message: `The Daykeeper request exceeded ${this.#timeoutMs}ms`,
+            code: "NETWORK_ERROR",
+            message: "The Daykeeper customer API could not be reached",
             retryable: true,
           });
         }
-        if (options.signal?.aborted) {
-          throw new DaykeeperWebTransportError({
-            code: "REQUEST_ABORTED",
-            message: "The Daykeeper request was aborted",
+
+        const payload = await readJson(response);
+        if (response.status === 401 && attempt === 0) continue;
+        if (!response.ok) {
+          const code =
+            isRecord(payload) && typeof payload.error === "string"
+              ? payload.error
+              : "daykeeper_request_failed";
+          throw new DaykeeperWebApiError({
+            status: response.status,
+            code,
+            retryable:
+              response.status === 408 ||
+              response.status === 429 ||
+              response.status >= 500,
           });
         }
-        throw new DaykeeperWebTransportError({
-          code: "NETWORK_ERROR",
-          message: "The Daykeeper customer API could not be reached",
-          retryable: true,
-        });
+        if (!isRecord(payload)) {
+          throw new DaykeeperWebTransportError({
+            code: "INVALID_RESPONSE",
+            message: "The Daykeeper customer API returned an invalid response",
+            retryable: true,
+          });
+        }
+        return payload as ResponseBody;
       }
-
-      const payload = await readJson(response);
-      if (!response.ok) {
-        const code =
-          isRecord(payload) && typeof payload.error === "string"
-            ? payload.error
-            : "daykeeper_request_failed";
-        throw new DaykeeperWebApiError({
-          status: response.status,
-          code,
-          retryable:
-            response.status === 408 ||
-            response.status === 429 ||
-            response.status >= 500,
-        });
-      }
-      if (!isRecord(payload)) {
-        throw new DaykeeperWebTransportError({
-          code: "INVALID_RESPONSE",
-          message: "The Daykeeper customer API returned an invalid response",
-          retryable: true,
-        });
-      }
-      return payload as ResponseBody;
+      throw new Error("Unreachable Daykeeper request state");
     } finally {
       clearTimeout(timeout);
       options.signal?.removeEventListener("abort", onCallerAbort);

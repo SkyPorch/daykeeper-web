@@ -23,10 +23,11 @@ import { createDaykeeperWebClient } from "@skyporch/daykeeper-web";
 
 const daykeeper = createDaykeeperWebClient({
   baseUrl: "https://support.example.com/support-api",
-  getAccessToken: async () => {
+  getAccessToken: async ({ forceRefresh }) => {
     const response = await fetch("/api/daykeeper-token", {
       method: "POST",
       credentials: "same-origin",
+      headers: forceRefresh ? { "cache-control": "no-cache" } : undefined,
     });
     if (!response.ok) throw new Error("Could not start support");
     return (await response.json()).token;
@@ -37,7 +38,8 @@ const { conversations } = await daykeeper.listConversations();
 ```
 
 The token provider is called for every request so applications can rotate short
-credentials. Do not store tokens in local storage, URLs, analytics, or logs.
+credentials. After HTTP 401, the SDK asks for one forced refresh and retries
+exactly once. Do not store tokens in local storage, URLs, analytics, or logs.
 
 ## API
 
