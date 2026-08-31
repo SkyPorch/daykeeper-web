@@ -233,9 +233,11 @@ export class DaykeeperWebClient {
             code: isRecord(payload) ? payload.error : undefined,
             retryable:
               !mutating &&
-              (response.status === 408 ||
-                response.status === 429 ||
-                response.status >= 500),
+              (isRecord(payload) && typeof payload.retryable === "boolean"
+                ? payload.retryable
+                : response.status === 408 ||
+                  response.status === 429 ||
+                  response.status >= 500),
             outcomeUnknown:
               mutating && (response.status === 408 || response.status >= 500),
           });

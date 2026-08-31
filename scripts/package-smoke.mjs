@@ -187,13 +187,31 @@ assert.equal(vm.runInContext("typeof Buffer", context), "undefined");
 assert.equal(vm.runInContext("typeof document", context), "undefined");
 
 let requests = 0;
+let usageFailure;
 const server = createServer((request, response) => {
   requests++;
-  assert.equal(request.url, "/support-api/v1/unread");
+  assert.equal(
+    request.url,
+    request.method === "POST"
+      ? "/support-api/v1/conversations"
+      : "/support-api/v1/unread",
+  );
   assert.equal(
     request.headers.authorization,
     "Bearer synthetic-customer-token",
   );
+  if (usageFailure) {
+    response.writeHead(usageFailure[0], { "content-type": "application/json" });
+    response.end(
+      JSON.stringify({
+        error: usageFailure[1],
+        retryable: false,
+        message: "synthetic-private-diagnostic",
+        nextAction: "https://private.example.test/token",
+      }),
+    );
+    return;
+  }
   response.writeHead(200, { "content-type": "application/json" });
   response.end(
     JSON.stringify({ unreadCount: 0, conversation: null, conversations: [] }),
@@ -215,6 +233,46 @@ try {
     assert.deepEqual(Array.from(result.conversations), []);
   }
   assert.equal(requests, 3);
+  for (const entry of [esm, cjs, context.DaykeeperSmokeSDK]) {
+    const client = entry.createDaykeeperWebClient({
+      baseUrl,
+      getAccessToken: () => "synthetic-customer-token",
+    });
+    for (const [status, code] of [
+      [429, "daykeeper_usage_limit_exceeded"],
+      [403, "daykeeper_usage_not_enabled"],
+      [403, "daykeeper_support_not_ready"],
+      [409, "daykeeper_resource_conflict"],
+      [503, "daykeeper_support_unavailable"],
+    ]) {
+      usageFailure = [status, code];
+      for (const mutation of [false, true]) {
+        const before = requests;
+        await assert.rejects(
+          mutation ? client.createConversation() : client.getUnread(),
+          (error) => {
+            assert(error instanceof entry.DaykeeperWebApiError);
+            assert.equal(error.code, code);
+            assert.equal(error.status, status);
+            assert.equal(error.retryable, false);
+            assert.equal(error.outcomeUnknown, mutation && status >= 500);
+            assert.doesNotMatch(JSON.stringify(error), /private/);
+            assert.doesNotMatch(
+              String(error.stack),
+              /private-diagnostic|private\.example/,
+            );
+            return true;
+          },
+        );
+        assert.equal(
+          requests,
+          before + 1,
+          "Known usage errors never replay a request",
+        );
+      }
+    }
+  }
+  assert.equal(requests, 33);
 } finally {
   server.closeAllConnections();
   await new Promise((resolve) => server.close(resolve));
@@ -238,7 +296,8 @@ const result = {
     "customer-only API type exclusions",
     "browser-target bundle from installed export",
     "bundle execution without Node/DOM globals",
-    "three real loopback HTTP requests",
+    "33 real loopback HTTP requests across ESM, CJS and browser-target bundle",
+    "five managed usage failures preserve safe advice, redact bodies and never replay",
   ],
   browser: browser ? await browserSmoke({ root, consumer, directory }) : null,
 };

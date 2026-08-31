@@ -2,18 +2,18 @@
 
 `customer.yaml` is an exact copy of `openapi/customer.yaml` from
 `SkyPorch/daykeeper-openapi`, commit
-`924dafc661952c2f97cb41e609e6b531c1f44a7b` (license metadata, PR #7).
+`e62cfd25228565b15fe169cd7b65a3279932b59f` (usage contracts, PR #11).
 
-- SHA-256: `5dcbefc60a33dc844cff452c0828abd4d462eac8685ca4e1192544bbeca97e4d`
-- Source Git blob: `6de29c4e6a80c9297a36579ddf19234b47ded8c8`
+- SHA-256: `b62dd386a87380f3fe94f968ff8fedf703ca6079199ea74057d32e31f91e1fec`
+- Source Git blob: `2f1b48fedaddfb7335389f75640e5e3b301575fb`
 - Tag status: unreleased commit snapshot; no new upstream tag is claimed.
 
 The released baseline is tag `v1.0.0`, commit
 `35f5bd45fe0c6a6901766543bff90dae6838b965`. Provider-neutral wording came from
 PR #5, commit `fec6f9b88661fbfd04b7d7c66acce257f15ea6bd`.
-PR #7 aligns `info.license` with the contract's Apache-2.0 license. Operations,
-schemas, scopes, and generated TypeScript types are unchanged. PR #8 entitlement
-additions are not included.
+The customer snapshot retains Apache-2.0 metadata and adds optional safe usage
+error guidance from PR #10. Existing response shapes remain valid. Management
+usage and entitlement operations are not exposed by this customer SDK.
 
 The snapshot includes backend-only lifecycle and erasure operations. This
 browser SDK exposes only the eight customer methods listed in its README;

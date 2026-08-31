@@ -120,6 +120,19 @@ abort reasons, headers, response bodies, and URLs are not attached to errors.
 transient failure, not an automatic retry loop or a guarantee of success.
 `outcomeUnknown` flags dispatched writes whose result cannot be safely inferred.
 
+For reads, a boolean server `retryable` hint overrides legacy HTTP-status
+inference. In particular, a quota 429 or setup 503 with `retryable: false` must
+not enter a retry loop. Invalid or absent hints keep the legacy read behavior;
+no hint authorizes replay of a write.
+
+Known managed errors include `daykeeper_usage_limit_exceeded`,
+`daykeeper_usage_not_enabled`, `daykeeper_support_not_ready`,
+`daykeeper_resource_conflict`, and `daykeeper_support_unavailable`. Render
+reviewed, localized guidance based on these codes. Keep an unsent message
+visible and let customers read existing conversations. Do not show a successful
+send, offer automatic quota upgrades, or display raw server messages/URLs.
+An uncertain write needs reconciliation, not an automatic resend.
+
 ## Browser integration
 
 Every gateway request uses `credentials: "omit"`, `mode: "cors"`,

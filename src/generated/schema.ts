@@ -306,7 +306,22 @@ export interface components {
             [key: string]: unknown;
         };
         CustomerError: {
+            /** @description Stable error code. Codes are extensible; handle unknown values safely. */
             error: string;
+            /** @description Optional customer-safe explanation, never infrastructure diagnostics. */
+            message?: string;
+            /**
+             * @description Optional server retry advice. False means do not automatically replay
+             *     this request, including a 429 usage ceiling. Absence preserves older
+             *     status-based handling. True does not guarantee a write is idempotent.
+             */
+            retryable?: boolean;
+            /**
+             * @description Optional next step. Known values are review_usage, review_setup and
+             *     refresh_conversation. Values are extensible and grant no authority
+             *     to change billing, budgets or account configuration.
+             */
+            nextAction?: string;
         };
     };
     responses: {
