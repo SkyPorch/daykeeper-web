@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { once } from "node:events";
@@ -80,6 +81,18 @@ export async function browserSmoke({ consumer, directory }) {
   let redirectTargetRequests = 0;
   let pageOrigin;
   let gatewayOrigin;
+  let completeResult;
+  let failResult;
+  const completion = new Promise((resolve, reject) => {
+    completeResult = resolve;
+    failResult = reject;
+  });
+  // Register a handler before the server/child can report an early failure.
+  completion.catch(() => {});
+  let chromium;
+  let browserClosed;
+  let deadline;
+  let browserStderr = "";
   const target = createServer((_request, response) => {
     redirectTargetRequests++;
     json(response, 200, unread);
@@ -149,6 +162,35 @@ export async function browserSmoke({ consumer, directory }) {
   });
   const page = createServer((request, response) => {
     const path = new URL(request.url, "http://fixture").pathname;
+    if (path === "/result") {
+      if (request.method !== "POST" || request.headers.origin !== pageOrigin) {
+        response.writeHead(403).end();
+        return;
+      }
+      void (async () => {
+        try {
+          let body = "";
+          for await (const chunk of request) {
+            body += chunk.toString("utf8");
+            assert(
+              Buffer.byteLength(body) <= 8192,
+              "Fixture result exceeds bound",
+            );
+          }
+          const result = JSON.parse(body);
+          assert(
+            typeof result.ok === "boolean" && Array.isArray(result.checks),
+          );
+          assert(result.checks.every((check) => typeof check === "string"));
+          json(response, 200, { received: true });
+          completeResult(result);
+        } catch (error) {
+          response.writeHead(400).end();
+          failResult(error);
+        }
+      })();
+      return;
+    }
     if (path === "/seed-cookie")
       return json(
         response,
@@ -180,7 +222,7 @@ export async function browserSmoke({ consumer, directory }) {
   try {
     gatewayOrigin = await listen(gateway);
     pageOrigin = await listen(page);
-    const result = await run(
+    chromium = spawn(
       executable,
       [
         "--headless=new",
@@ -197,24 +239,31 @@ export async function browserSmoke({ consumer, directory }) {
         "--use-mock-keychain",
         "--password-store=basic",
         "--metrics-recording-only",
-        "--virtual-time-budget=20000",
-        "--dump-dom",
         `${pageOrigin}/?synthetic-referrer-marker=do-not-forward`,
       ],
-      { timeout: 45_000 },
+      { stdio: ["ignore", "ignore", "pipe"] },
     );
-    await writeFile(join(directory, "browser-dom.html"), result.stdout);
-    await writeFile(join(directory, "browser-stderr.log"), result.stderr);
-    const encoded = result.stdout.match(
-      /<pre id="result">([\s\S]*?)<\/pre>/,
-    )?.[1];
-    assert(encoded, "Browser did not produce a fixture result");
-    const decoded = encoded
-      .replaceAll("&quot;", '"')
-      .replaceAll("&lt;", "<")
-      .replaceAll("&gt;", ">")
-      .replaceAll("&amp;", "&");
-    const actual = JSON.parse(decoded);
+    chromium.stderr.on("data", (chunk) => {
+      browserStderr = (browserStderr + chunk.toString()).slice(-64 * 1024);
+    });
+    chromium.once("error", failResult);
+    browserClosed = new Promise((resolve) =>
+      chromium.once("close", (code) => {
+        failResult(
+          new Error(`Browser exited before fixture completion (${code})`),
+        );
+        resolve();
+      }),
+    );
+    deadline = setTimeout(
+      () =>
+        failResult(
+          new Error("Browser fixture did not complete within 45 seconds"),
+        ),
+      45_000,
+    );
+    const actual = await completion;
+    clearTimeout(deadline);
     assert.equal(actual.ok, true, JSON.stringify(actual));
     const api = requests.filter((request) => request.method !== "OPTIONS");
     assert(
@@ -265,6 +314,14 @@ export async function browserSmoke({ consumer, directory }) {
     );
     return evidence;
   } finally {
+    clearTimeout(deadline);
+    if (chromium) {
+      chromium.kill("SIGTERM");
+      const forceStop = setTimeout(() => chromium.kill("SIGKILL"), 3000);
+      await browserClosed;
+      clearTimeout(forceStop);
+      await writeFile(join(directory, "browser-stderr.log"), browserStderr);
+    }
     for (const server of [page, gateway, target]) {
       server.closeAllConnections();
       await new Promise((resolve) => server.close(resolve));

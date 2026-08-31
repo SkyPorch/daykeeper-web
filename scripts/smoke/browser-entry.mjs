@@ -114,15 +114,19 @@ async function main() {
   return { ok: true, checks };
 }
 
-main().then(
-  (result) => {
-    document.getElementById("result").textContent = JSON.stringify(result);
-  },
-  (error) => {
-    document.getElementById("result").textContent = JSON.stringify({
-      ok: false,
-      checks,
-      error: String(error.message),
-    });
-  },
+async function report(result) {
+  document.getElementById("result").textContent = JSON.stringify(result);
+  // The local runner waits for actual completion, not Chromium virtual time.
+  await fetch("/result", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(result),
+  });
+}
+main().then(report, (error) =>
+  report({
+    ok: false,
+    checks,
+    error: String(error.message),
+  }),
 );
