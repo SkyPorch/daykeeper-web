@@ -4,6 +4,8 @@
 
 - Preserve the five safe managed usage error codes and explicit boolean retry
   advice for reads. Writes remain non-retryable, with uncertain outcomes intact.
+- Honor explicit non-retry advice before a 401 token refresh; bound that body
+  read by the existing deadline and cancellation, without replaying on timeout.
 - Update the exact customer contract snapshot; no raw message or recovery URL
   from an error response is exposed.
 - Add a headless browser customer client with ESM, CommonJS, and TypeScript exports.
