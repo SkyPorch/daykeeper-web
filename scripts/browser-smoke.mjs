@@ -124,6 +124,13 @@ export async function browserSmoke({ consumer, directory }) {
     }
     if (mode === "masked401")
       return json(response, 401, { error: "expired_token" });
+    if (mode === "no-refresh")
+      return json(
+        response,
+        401,
+        { error: "expired_token", retryable: false },
+        cors,
+      );
     if (
       mode === "refresh" &&
       request.headers.authorization === "Bearer synthetic-stale-token"
@@ -289,6 +296,10 @@ export async function browserSmoke({ consumer, directory }) {
       "A write was replayed",
     );
     assert.equal(api.filter((request) => request.mode === "refresh").length, 2);
+    assert.equal(
+      api.filter((request) => request.mode === "no-refresh").length,
+      1,
+    );
     assert.equal(
       api.filter((request) => request.mode === "masked401").length,
       1,

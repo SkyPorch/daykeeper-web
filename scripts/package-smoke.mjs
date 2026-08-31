@@ -244,6 +244,7 @@ try {
       [403, "daykeeper_support_not_ready"],
       [409, "daykeeper_resource_conflict"],
       [503, "daykeeper_support_unavailable"],
+      [401, "expired_token"],
     ]) {
       usageFailure = [status, code];
       for (const mutation of [false, true]) {
@@ -272,7 +273,7 @@ try {
       }
     }
   }
-  assert.equal(requests, 33);
+  assert.equal(requests, 39);
 } finally {
   server.closeAllConnections();
   await new Promise((resolve) => server.close(resolve));
@@ -296,7 +297,7 @@ const result = {
     "customer-only API type exclusions",
     "browser-target bundle from installed export",
     "bundle execution without Node/DOM globals",
-    "33 real loopback HTTP requests across ESM, CJS and browser-target bundle",
+    "39 real loopback HTTP requests across ESM, CJS and browser-target bundle",
     "five managed usage failures preserve safe advice, redact bodies and never replay",
   ],
   browser: browser ? await browserSmoke({ root, consumer, directory }) : null,
