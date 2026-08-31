@@ -45,7 +45,7 @@
     "format:check": "prettier --check .",
     "generate": "openapi-typescript openapi/customer.yaml --output src/generated/schema.ts",
     "pack:check": "npm pack --dry-run --json",
-    "test": "tsx --test \"test/**/*.test.ts\"",
+    "test": "node scripts/run-tests.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "verify:exports": "node scripts/verify-exports.mjs",
     "smoke:package": "node scripts/package-smoke.mjs",
