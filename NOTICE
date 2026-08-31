@@ -1,0 +1,14 @@
+Daykeeper Web SDK
+Copyright (c) 2026 SkyPorch
+
+Runtime and lifecycle tests are adapted from SkyPorch/daykeeper-react-native,
+commit 4f373c8efbdc3d18e3a36b8e677a706f6809bab2, under the MIT License.
+The original MIT permission and copyright notice are preserved in LICENSE.
+Browser request policy, error redaction, mutation behavior, packaging, and tests
+are adaptations in this repository, not changes to the native package.
+
+The vendored Daykeeper customer API contract and generated type definitions
+originate from SkyPorch/daykeeper-openapi, commit
+924dafc661952c2f97cb41e609e6b531c1f44a7b, under Apache-2.0.
+The Apache license is preserved in openapi/LICENSE. Exact contract provenance
+and the unreleased snapshot status are recorded in openapi/SOURCE.md.

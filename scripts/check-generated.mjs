@@ -1,0 +1,42 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+
+const root = fileURLToPath(new URL("../", import.meta.url));
+const contract = await readFile(join(root, "openapi/customer.yaml"));
+const source = await readFile(join(root, "openapi/SOURCE.md"), "utf8");
+const checksum = createHash("sha256").update(contract).digest("hex");
+assert.equal(
+  checksum,
+  "5dcbefc60a33dc844cff452c0828abd4d462eac8685ca4e1192544bbeca97e4d",
+);
+assert(source.includes(checksum));
+assert(source.includes("924dafc661952c2f97cb41e609e6b531c1f44a7b"));
+const blob = createHash("sha1")
+  .update(`blob ${contract.length}\0`)
+  .update(contract)
+  .digest("hex");
+assert.equal(blob, "6de29c4e6a80c9297a36579ddf19234b47ded8c8");
+assert(source.includes(blob));
+assert.match(contract.toString(), /identifier: Apache-2\.0/);
+await mkdir(join(root, ".smoke"), { recursive: true });
+const directory = await mkdtemp(join(root, ".smoke/generated-"));
+const target = join(directory, "schema.ts");
+await promisify(execFile)(
+  join(root, "node_modules/.bin/openapi-typescript"),
+  ["openapi/customer.yaml", "--output", target],
+  { cwd: root, timeout: 60_000 },
+);
+assert(
+  (await readFile(target)).equals(
+    await readFile(join(root, "src/generated/schema.ts")),
+  ),
+  "Generated types differ; run pnpm generate and review the contract change",
+);
+console.log(
+  `Customer contract checksum, Git blob, provenance and regeneration verified: ${checksum}`,
+);

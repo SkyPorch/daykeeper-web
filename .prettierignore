@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.smoke/
+.pnpm-store/
+pnpm-lock.yaml
+openapi/customer.yaml
+openapi/LICENSE
+src/generated/schema.ts

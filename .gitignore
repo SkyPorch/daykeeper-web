@@ -1,6 +1,9 @@
 node_modules/
 dist/
 coverage/
+.smoke/
+.pnpm-store/
+*.tgz
 .DS_Store
 .env
 .env.*
