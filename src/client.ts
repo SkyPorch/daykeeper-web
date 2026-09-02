@@ -20,6 +20,19 @@ const MAX_RESPONSE_BYTES = 1024 * 1024;
 const MAX_TOKEN_LENGTH = 16_384;
 const MAX_MESSAGE_LENGTH = 16_000;
 
+/**
+ * Non-negotiable browser transport policy. It is applied to the Request object
+ * itself, so an injected transport that ignores RequestInit still cannot
+ * follow redirects or attach ambient credentials.
+ */
+const TRANSPORT_POLICY = {
+  credentials: "omit",
+  mode: "cors",
+  redirect: "error",
+  cache: "no-store",
+  referrerPolicy: "no-referrer",
+} as const satisfies RequestInit;
+
 export interface DaykeeperWebTokenProviderContext {
   /**
    * True only after a GET rejected the first token with HTTP 401. The
@@ -62,6 +75,7 @@ export class DaykeeperWebClient {
       typeof URL !== "function" ||
       typeof Headers !== "function" ||
       typeof AbortController !== "function" ||
+      typeof Request !== "function" ||
       typeof TextDecoder !== "function"
     ) {
       throw configurationError("Standard browser Fetch globals are required");
@@ -71,7 +85,7 @@ export class DaykeeperWebClient {
     if (typeof fetchImpl !== "function") {
       throw configurationError("A Fetch API implementation is required");
     }
-    this.#fetch = fetchImpl.bind(globalThis);
+    this.#fetch = hardenFetch(fetchImpl.bind(globalThis));
     if (typeof options.getAccessToken !== "function") {
       throw configurationError("getAccessToken must be a function");
     }
@@ -209,11 +223,7 @@ export class DaykeeperWebClient {
                   : JSON.stringify(options.body),
               headers,
               signal: lifetime.signal,
-              credentials: "omit",
-              mode: "cors",
-              redirect: "error",
-              cache: "no-store",
-              referrerPolicy: "no-referrer",
+              ...TRANSPORT_POLICY,
             });
           }, discardResponse);
         } catch (error) {
@@ -248,6 +258,9 @@ export class DaykeeperWebClient {
           throw new DaykeeperWebApiError({
             status: response.status,
             code: isRecord(payload) ? payload.error : undefined,
+            // The error envelope is open. Unknown members are ignored and the
+            // documented hints are projected only through safe allowlists.
+            nextAction: isRecord(payload) ? payload.nextAction : undefined,
             retryable:
               !mutating &&
               (isRecord(payload) && typeof payload.retryable === "boolean"
@@ -291,6 +304,25 @@ export function createDaykeeperWebClient(
   options: DaykeeperWebClientOptions,
 ): DaykeeperWebClient {
   return new DaykeeperWebClient(options);
+}
+
+function hardenFetch(
+  fetchImpl: typeof globalThis.fetch,
+): typeof globalThis.fetch {
+  return (input, init) => {
+    let request: Request;
+    try {
+      request = new Request(input as RequestInfo, {
+        ...init,
+        ...TRANSPORT_POLICY,
+      });
+    } catch {
+      throw configurationError(
+        "The Fetch implementation rejected the required request policy",
+      );
+    }
+    return fetchImpl(request, { ...init, ...TRANSPORT_POLICY });
+  };
 }
 
 async function resolveToken(

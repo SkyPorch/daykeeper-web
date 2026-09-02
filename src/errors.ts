@@ -35,15 +35,31 @@ const SAFE_API_CODES = new Set([
   "daykeeper_support_unavailable",
 ]);
 
+/**
+ * Contract-documented next steps. The envelope is open and its values are
+ * extensible, so an unrecognized hint is dropped rather than surfaced: a
+ * gateway string is untrusted and none of these grant account authority.
+ */
+export type DaykeeperWebNextAction =
+  "review_usage" | "review_setup" | "refresh_conversation";
+
+const SAFE_NEXT_ACTIONS = new Set<string>([
+  "review_usage",
+  "review_setup",
+  "refresh_conversation",
+]);
+
 export class DaykeeperWebApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly retryable: boolean;
   readonly outcomeUnknown: boolean;
+  readonly nextAction?: DaykeeperWebNextAction;
 
   constructor(options: {
     status: number;
     code?: unknown;
+    nextAction?: unknown;
     retryable?: boolean;
     outcomeUnknown?: boolean;
   }) {
@@ -57,6 +73,12 @@ export class DaykeeperWebApiError extends Error {
     this.code = code;
     this.outcomeUnknown = options.outcomeUnknown ?? false;
     this.retryable = !this.outcomeUnknown && (options.retryable ?? false);
+    if (
+      typeof options.nextAction === "string" &&
+      SAFE_NEXT_ACTIONS.has(options.nextAction)
+    ) {
+      this.nextAction = options.nextAction as DaykeeperWebNextAction;
+    }
   }
 
   toJSON() {
@@ -66,6 +88,7 @@ export class DaykeeperWebApiError extends Error {
       code: this.code,
       retryable: this.retryable,
       outcomeUnknown: this.outcomeUnknown,
+      ...(this.nextAction === undefined ? {} : { nextAction: this.nextAction }),
     };
   }
 }
