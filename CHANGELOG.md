@@ -2,6 +2,12 @@
 
 ## 0.1.0 — unreleased
 
+- Tolerate an open error envelope: unknown members in an error body are ignored
+  and the response still parses to the typed error.
+- Expose a `nextAction` hint alongside `retryable`, limited to the documented
+  values; unrecognized hints and raw messages are still withheld.
+- Apply the browser transport policy (no redirects, no ambient credentials) to
+  the Request object, so an injected `fetch` cannot bypass it.
 - Preserve the five safe managed usage error codes and explicit boolean retry
   advice for reads. Writes remain non-retryable, with uncertain outcomes intact.
 - Honor explicit non-retry advice before a 401 token refresh; bound that body
