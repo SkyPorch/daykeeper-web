@@ -42,7 +42,7 @@
     "openapi/LICENSE"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --sourcemap --target es2020 --platform browser --clean",
+    "build": "tsup src/index.ts --format esm,cjs --dts --sourcemap --target es2020 --platform browser --clean && node scripts/normalize-sourcemaps.mjs",
     "check": "pnpm format:check && pnpm check:generated && pnpm typecheck && pnpm test && pnpm build && pnpm verify:exports && pnpm smoke:package && pnpm pack:verify",
     "check:generated": "node scripts/check-generated.mjs",
     "format": "prettier --write .",

@@ -37,7 +37,7 @@ const packed = await run(
 );
 const [pack] = JSON.parse(packed.stdout);
 assert.equal(pack.name, "@skyporch/daykeeper-web");
-assert.equal(pack.version, "0.1.0");
+assert.equal(pack.version, manifest.version);
 const allowed = new Set([
   "package.json",
   "LICENSE",

@@ -26,6 +26,17 @@ changes because of the management contract bump. See `COMPATIBILITY.md`.
 
 ### Changes
 
+- Add a provenance-producing release workflow, a documented release sequence in
+  `RELEASING.md`, a version/contract table in `COMPATIBILITY.md`, and
+  `docs/quickstart.md`. The package stays `private: true`; removing that block
+  is a separate approved change.
+- Add `scripts/verify-pack.mjs` (`pnpm pack:verify`, now part of `pnpm check`):
+  it packs twice and compares per-file content digests, rejects test/fixture
+  paths in the tarball, and requires source maps to stay inside `dist`.
+- Rewrite published source-map `sources` to dist-local names. They previously
+  pointed at `../src/*.ts`, which is not published, so a consumer's debugger
+  could not resolve them; the original text is still embedded in
+  `sourcesContent`.
 - Tolerate an open error envelope: unknown members in an error body are ignored
   and the response still parses to the typed error.
 - Pass through any gateway error code with the documented shape
