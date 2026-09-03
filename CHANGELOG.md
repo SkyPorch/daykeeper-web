@@ -1,6 +1,30 @@
 # Changelog
 
-## 0.1.0 — unreleased
+## 0.2.0 — unreleased
+
+### Breaking
+
+- `isDaykeeperApiErrorCode` and the error surface no longer restrict
+  `DaykeeperWebApiError.code` to a fixed allowlist. Any gateway code matching
+  `^[a-z][a-z0-9_]{2,63}$` is now passed through unchanged, and only free-form
+  server prose collapses to `daykeeper_request_failed`. Code that treated the
+  old closed union as exhaustive — a `switch` without a `default`, or an
+  exhaustiveness assertion over the union — must add a fallback branch. This is
+  this package's own break and the reason the release is 0.2.0 rather than
+  0.1.1.
+- The browser transport policy (no redirects, no ambient credentials, no
+  cookies or referrer) is now pinned onto the `Request` object rather than
+  passed through `RequestInit`. An injected `fetch` that previously relaxed
+  those settings can no longer do so, and a transport that rejects a
+  pre-built `Request` must be updated.
+
+The required `Idempotency-Key` header introduced by the Daykeeper **management**
+contract 0.2.0 does **not** apply to this package. `daykeeper-web` vendors the
+**customer** contract, which is still 0.1.0 and defines no `Idempotency-Key`
+header and no `200`-alongside-`201` replay response. No request this SDK sends
+changes because of the management contract bump. See `COMPATIBILITY.md`.
+
+### Changes
 
 - Tolerate an open error envelope: unknown members in an error body are ignored
   and the response still parses to the typed error.

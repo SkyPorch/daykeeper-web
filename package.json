@@ -1,7 +1,11 @@
 {
   "name": "@skyporch/daykeeper-web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "description": "Headless browser SDK for Daykeeper customer support",
   "type": "module",
   "sideEffects": false,
@@ -39,12 +43,13 @@
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --sourcemap --target es2020 --platform browser --clean",
-    "check": "pnpm format:check && pnpm check:generated && pnpm typecheck && pnpm test && pnpm build && pnpm verify:exports && pnpm smoke:package",
+    "check": "pnpm format:check && pnpm check:generated && pnpm typecheck && pnpm test && pnpm build && pnpm verify:exports && pnpm smoke:package && pnpm pack:verify",
     "check:generated": "node scripts/check-generated.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "generate": "openapi-typescript openapi/customer.yaml --output src/generated/schema.ts",
     "pack:check": "npm pack --dry-run --json",
+    "pack:verify": "node scripts/verify-pack.mjs",
     "test": "node scripts/run-tests.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "verify:exports": "node scripts/verify-exports.mjs",
