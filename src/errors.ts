@@ -8,32 +8,23 @@ export type DaykeeperWebTransportErrorCode =
   | "RESPONSE_TOO_LARGE"
   | "REDIRECT_REJECTED";
 
-// Gateway bodies are untrusted. A syntactically valid string can still contain
-// a token, customer identifier, or message, so a regex is not a redaction policy.
-const SAFE_API_CODES = new Set([
-  "missing_bearer_token",
-  "invalid_bearer_token",
-  "invalid_token",
-  "unsupported_token",
-  "invalid_signature",
-  "invalid_tenant",
-  "unknown_tenant",
-  "invalid_issuer",
-  "invalid_audience",
-  "invalid_subject",
-  "invalid_expiration",
-  "expired_token",
-  "token_lifetime_too_long",
-  "insufficient_scope",
-  "not_found",
-  "support_upstream_rejected",
-  "support_upstream_unavailable",
-  "daykeeper_usage_limit_exceeded",
-  "daykeeper_usage_not_enabled",
-  "daykeeper_support_not_ready",
-  "daykeeper_resource_conflict",
-  "daykeeper_support_unavailable",
-]);
+// Error bodies are untrusted, so a code is only allowed through when its
+// *shape* proves it is a code and not prose, a token, or an identifier: ASCII
+// lowercase snake_case, 3 to 64 characters. The gateway's error vocabulary is
+// open and grows without an SDK release, so an allowlist would silently
+// collapse codes that consuming apps switch on. A bounded snake_case token is
+// not a redaction channel of consequence; anything failing the shape -- English
+// prose, mixed case, punctuation, whitespace, non-string values -- becomes the
+// generic code below. The contract's `message` is still never read, and the
+// error message remains the code itself.
+const API_CODE_SHAPE = /^[a-z][a-z0-9_]{2,63}$/;
+
+export const DAYKEEPER_GENERIC_API_CODE = "daykeeper_request_failed";
+
+/** True when `value` has the documented customer API error-code shape. */
+export function isDaykeeperApiErrorCode(value: unknown): value is string {
+  return typeof value === "string" && API_CODE_SHAPE.test(value);
+}
 
 /**
  * Contract-documented next steps. The envelope is open and its values are
@@ -63,10 +54,9 @@ export class DaykeeperWebApiError extends Error {
     retryable?: boolean;
     outcomeUnknown?: boolean;
   }) {
-    const code =
-      typeof options.code === "string" && SAFE_API_CODES.has(options.code)
-        ? options.code
-        : "daykeeper_request_failed";
+    const code = isDaykeeperApiErrorCode(options.code)
+      ? options.code
+      : DAYKEEPER_GENERIC_API_CODE;
     super(code);
     this.name = "DaykeeperWebApiError";
     this.status = options.status;

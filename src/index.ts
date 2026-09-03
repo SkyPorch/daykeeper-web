@@ -5,7 +5,12 @@ export type {
   DaykeeperWebTokenProvider,
   DaykeeperWebTokenProviderContext,
 } from "./client.js";
-export { DaykeeperWebApiError, DaykeeperWebTransportError } from "./errors.js";
+export {
+  DAYKEEPER_GENERIC_API_CODE,
+  DaykeeperWebApiError,
+  DaykeeperWebTransportError,
+  isDaykeeperApiErrorCode,
+} from "./errors.js";
 export type {
   DaykeeperWebNextAction,
   DaykeeperWebTransportErrorCode,

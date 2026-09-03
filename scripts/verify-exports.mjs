@@ -16,15 +16,20 @@ assert.equal(manifest.exports["."].import.default, manifest.module);
 assert.equal(manifest.exports["."].require.default, manifest.main);
 const esm = await import("../dist/index.js");
 const cjs = createRequire(import.meta.url)("../dist/index.cjs");
-const names = [
+const callables = [
   "createDaykeeperWebClient",
   "DaykeeperWebClient",
   "DaykeeperWebApiError",
   "DaykeeperWebTransportError",
-].sort();
+  "isDaykeeperApiErrorCode",
+];
+const constants = { DAYKEEPER_GENERIC_API_CODE: "daykeeper_request_failed" };
+const names = [...callables, ...Object.keys(constants)].sort();
 for (const entry of [esm, cjs]) {
   assert.deepEqual(Object.keys(entry).sort(), names);
-  for (const name of names) assert.equal(typeof entry[name], "function");
+  for (const name of callables) assert.equal(typeof entry[name], "function");
+  for (const [name, value] of Object.entries(constants))
+    assert.equal(entry[name], value);
 }
 for (const file of ["index.js", "index.cjs"]) {
   const source = await readFile(
