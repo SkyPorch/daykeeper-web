@@ -310,6 +310,10 @@ function hardenFetch(
   fetchImpl: typeof globalThis.fetch,
 ): typeof globalThis.fetch {
   return (input, init) => {
+    // The policy is applied to the Request itself and the Request is the only
+    // argument dispatched, so a transport that ignores RequestInit still
+    // cannot follow a redirect or attach ambient credentials. Passing a second
+    // init alongside it would also re-send the body and break a stream.
     let request: Request;
     try {
       request = new Request(input as RequestInfo, {
@@ -317,11 +321,14 @@ function hardenFetch(
         ...TRANSPORT_POLICY,
       });
     } catch {
-      throw configurationError(
-        "The Fetch implementation rejected the required request policy",
+      // Reject rather than throw: callers await this like any other fetch.
+      return Promise.reject(
+        configurationError(
+          "The Fetch implementation rejected the required request policy",
+        ),
       );
     }
-    return fetchImpl(request, { ...init, ...TRANSPORT_POLICY });
+    return fetchImpl(request);
   };
 }
 

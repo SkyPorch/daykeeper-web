@@ -116,8 +116,9 @@ test("token providers are called per request without a shared identity/token cac
   const sent: string[] = [];
   const client = makeClient({
     getAccessToken: () => activeToken,
-    fetch: async (_input, init) => {
-      sent.push(new Headers(init?.headers).get("authorization")!);
+    // The SDK dispatches a hardened Request, so read the header from it.
+    fetch: async (input) => {
+      sent.push(new Request(input).headers.get("authorization")!);
       return success();
     },
   });
@@ -667,4 +668,31 @@ test("an injected Fetch receives the browser transport policy on the Request its
       ["POST", "/support-api/v1/conversations/42/messages"],
     ],
   );
+});
+
+test("a caller-built Request cannot relax the browser transport policy", async () => {
+  const dispatched: Request[] = [];
+  const relaxed = new Request(`${baseUrl}/v1/unread`, {
+    redirect: "follow",
+    credentials: "include",
+    cache: "default",
+    referrerPolicy: "unsafe-url",
+  });
+  assert.equal(relaxed.redirect, "follow");
+  assert.equal(relaxed.credentials, "include");
+  const client = makeClient({
+    // A transport that re-wraps or ignores the SDK's own init still receives a
+    // Request whose policy is already fixed.
+    fetch: async (input) => {
+      const request = new Request(input);
+      dispatched.push(request);
+      assert.equal(request.redirect, "error");
+      assert.equal(request.credentials, "omit");
+      return success();
+    },
+  });
+  await client.getUnread();
+  assert.equal(dispatched.length, 1);
+  assert.equal(dispatched[0]!.redirect, "error");
+  assert.equal(dispatched[0]!.credentials, "omit");
 });
