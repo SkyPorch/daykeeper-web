@@ -23,3 +23,6 @@ profiles remain in ignored task directories, never in the published tarball.
 SDK changes do not authorize backend changes or live customer tests. Report
 integration gaps explicitly. This repository remains private/unpublished until
 maintainer approval; local commits do not authorize pushes or releases.
+
+Keep the repository publishable: examples, fixtures, and documentation must not
+name downstream products, consuming applications, or their hostnames.

@@ -5,6 +5,22 @@ data, or tenant identifiers in reports. Contact SkyPorch privately with the
 affected version, synthetic reproduction steps, and impact. No public package
 version is currently supported; this foundation is unreleased and unpublished.
 
+## How to report
+
+Use GitHub's private vulnerability reporting on this repository: open the
+**Security** tab and choose **Report a vulnerability**. If that is unavailable
+to you, contact the SkyPorch maintainers privately through your existing
+SkyPorch support channel. Do not open a public issue.
+
+## What to expect
+
+- Acknowledgement within 3 business days.
+- A status update at least every 7 days while the report is open.
+- Coordinated disclosure within 90 days of the report, or sooner once a fix
+  ships. Tell us if you intend to publish earlier so a fix can be prepared.
+
+## Security model
+
 The SDK accepts a short-lived customer-token provider, never an administrative
 API key interface. It has no persistence, telemetry, cookie authentication, or
 background delivery. Configure the gateway from trusted application settings;
