@@ -60,6 +60,28 @@ async function main() {
   );
   check(signals[0] === signals[1], "refresh retains the original abort signal");
 
+  let deniedRefreshCalls = 0;
+  try {
+    await client("no-refresh", {
+      getAccessToken: () => {
+        deniedRefreshCalls++;
+        return "synthetic-customer-token";
+      },
+    }).getUnread();
+    throw new Error("Expected an explicit non-retryable 401");
+  } catch (error) {
+    check(
+      error instanceof DaykeeperWebApiError &&
+        error.status === 401 &&
+        !error.retryable,
+      "CORS-readable explicit 401 denial stays non-retryable",
+    );
+    check(
+      deniedRefreshCalls === 1,
+      "explicit 401 denial never refreshes credentials",
+    );
+  }
+
   let maskedCalls = 0;
   await rejectsCode(
     client("masked401", {
@@ -114,15 +136,19 @@ async function main() {
   return { ok: true, checks };
 }
 
-main().then(
-  (result) => {
-    document.getElementById("result").textContent = JSON.stringify(result);
-  },
-  (error) => {
-    document.getElementById("result").textContent = JSON.stringify({
-      ok: false,
-      checks,
-      error: String(error.message),
-    });
-  },
+async function report(result) {
+  document.getElementById("result").textContent = JSON.stringify(result);
+  // The local runner waits for actual completion, not Chromium virtual time.
+  await fetch("/result", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(result),
+  });
+}
+main().then(report, (error) =>
+  report({
+    ok: false,
+    checks,
+    error: String(error.message),
+  }),
 );

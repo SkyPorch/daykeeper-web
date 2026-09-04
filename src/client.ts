@@ -222,20 +222,39 @@ export class DaykeeperWebClient {
         }
 
         assertResponseEndpoint(response, requestUrl);
+        let payload: unknown;
         if (!mutating && response.status === 401 && attempt === 0) {
-          discardResponse(response);
-          continue;
+          // A managed denial may explicitly forbid replay, including an auth
+          // refresh. Read it within the same size/deadline/cancellation bounds.
+          try {
+            payload = await readJson(response, lifetime);
+          } catch (error) {
+            // Complete legacy non-JSON 401 responses carry no structured hint.
+            // A stalled/oversized/cancelled response is not permission to retry.
+            if (
+              !(error instanceof DaykeeperWebTransportError) ||
+              error.code !== "INVALID_RESPONSE"
+            )
+              throw error;
+          }
+          if (!(isRecord(payload) && payload.retryable === false)) {
+            discardResponse(response);
+            continue;
+          }
+        } else {
+          payload = await readJson(response, lifetime);
         }
-        const payload = await readJson(response, lifetime);
         if (!response.ok) {
           throw new DaykeeperWebApiError({
             status: response.status,
             code: isRecord(payload) ? payload.error : undefined,
             retryable:
               !mutating &&
-              (response.status === 408 ||
-                response.status === 429 ||
-                response.status >= 500),
+              (isRecord(payload) && typeof payload.retryable === "boolean"
+                ? payload.retryable
+                : response.status === 408 ||
+                  response.status === 429 ||
+                  response.status >= 500),
             outcomeUnknown:
               mutating && (response.status === 408 || response.status >= 500),
           });
