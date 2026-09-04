@@ -5,7 +5,7 @@ It provides typed customer operations, not a visual messenger, installation
 snippet, React wrapper, or administrative API.
 
 **Unreleased foundation:** this repository and package remain private. Version
-`0.1.0` is a local candidate, not an npm release. Publishing is explicitly
+`0.2.0` is a local candidate, not an npm release. Publishing is explicitly
 blocked pending review and the gates in [RELEASING.md](RELEASING.md).
 
 ## Evaluate locally
@@ -15,7 +15,7 @@ pnpm install --frozen-lockfile
 pnpm check
 npm pack
 # In a separate application, install the reviewed local .tgz file.
-npm install /path/to/skyporch-daykeeper-web-0.1.0.tgz
+npm install /path/to/skyporch-daykeeper-web-0.2.0.tgz
 ```
 
 The package has no runtime dependencies. It ships ESM, CommonJS, and TypeScript

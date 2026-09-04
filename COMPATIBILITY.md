@@ -1,5 +1,27 @@
 # Browser compatibility and integration gates
 
+## Version and contract compatibility
+
+| Package version                               | Customer contract | Management contract                                                           | Contract tag                                                                                  | Contract commit                                                                        |
+| --------------------------------------------- | ----------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `@skyporch/daykeeper-web` 0.2.0 (unreleased)  | 0.1.0             | not consumed (gateway management contract 0.2.0 is unrelated to this package) | none yet — snapshot is an untagged commit; a released tag must be recorded before publication | `4a2b82c9b23503073dc26fdeb5163e8869d007b8` (`SkyPorch/daykeeper-openapi`, PR #13 head) |
+| `@skyporch/daykeeper-web` 0.1.0 (unpublished) | 0.1.0             | not consumed                                                                  | `v1.0.0`                                                                                      | `35f5bd45fe0c6a6901766543bff90dae6838b965`                                             |
+
+This package vendors the **customer** contract (`openapi/customer.yaml`), which
+is still at 0.1.0. The `Idempotency-Key` request header that becomes REQUIRED on
+flow mutations in the **management** contract 0.2.0, and the `200` returned
+alongside `201` for a replayed mutation, belong to that management contract
+only. Neither applies here: the customer contract defines no such header and no
+such replay response, and `daykeeper-web` sends no management requests. The
+0.2.0 version of this package is driven by its own breaking change, described in
+`CHANGELOG.md`.
+
+Per `SkyPorch/daykeeper-openapi` `VERSIONING.md`, contract releases are
+immutable `vMAJOR.MINOR.PATCH` tags and every SDK release must record the exact
+contract tag and commit it was built against. The 0.2.0 row above is not
+release-complete until `openapi/SOURCE.md` and that row both point at an
+immutable tag rather than a PR head; see `RELEASING.md` step 2.
+
 ## Runtime contract
 
 The SDK uses browser-standard `fetch`, `Headers`, `URL`, `AbortController`,
