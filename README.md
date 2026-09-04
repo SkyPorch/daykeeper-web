@@ -106,9 +106,13 @@ This contract provides no write idempotency-key option; the SDK invents none.
 
 ## Errors
 
-`DaykeeperWebApiError` exposes `status`, a safe allowlisted `code`, `retryable`,
-and `outcomeUnknown`. Unknown server error text becomes
-`daykeeper_request_failed`, never a raw response body.
+`DaykeeperWebApiError` exposes `status`, `code`, `retryable`, `outcomeUnknown`,
+and an optional `nextAction`. The gateway's error vocabulary is open, so a
+`code` is passed through whenever it has the documented shape
+(`^[a-z][a-z0-9_]{2,63}$`, checked by the exported `isDaykeeperApiErrorCode`);
+anything else, including free-form server prose, becomes
+`daykeeper_request_failed`. `nextAction` is limited to the documented values.
+The response `message` is never read, so no raw response body reaches an error.
 
 `DaykeeperWebTransportError` exposes the same decision fields except HTTP
 status. Codes include `INVALID_CONFIGURATION`, `TOKEN_PROVIDER_ERROR`,

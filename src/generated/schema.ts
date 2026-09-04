@@ -322,6 +322,8 @@ export interface components {
              *     to change billing, budgets or account configuration.
              */
             nextAction?: string;
+        } & {
+            [key: string]: unknown;
         };
     };
     responses: {

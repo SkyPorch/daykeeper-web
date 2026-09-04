@@ -2,17 +2,19 @@
 
 `customer.yaml` is an exact copy of `openapi/customer.yaml` from
 `SkyPorch/daykeeper-openapi`, commit
-`e62cfd25228565b15fe169cd7b65a3279932b59f` (usage contracts, PR #11).
+`4a2b82c9b23503073dc26fdeb5163e8869d007b8` (agent credentials, PR #13 head).
 
-- SHA-256: `b62dd386a87380f3fe94f968ff8fedf703ca6079199ea74057d32e31f91e1fec`
-- Source Git blob: `2f1b48fedaddfb7335389f75640e5e3b301575fb`
+- SHA-256: `ae75711072950c786d69401301292659ece7f37461cf0621ae4f8a58836b82bd`
+- Source Git blob: `9cdf5423e73ad8008fc62adeb8c66e3c018c357d`
 - Tag status: unreleased commit snapshot; no new upstream tag is claimed.
 
 The released baseline is tag `v1.0.0`, commit
 `35f5bd45fe0c6a6901766543bff90dae6838b965`. Provider-neutral wording came from
 PR #5, commit `fec6f9b88661fbfd04b7d7c66acce257f15ea6bd`.
 The customer snapshot retains Apache-2.0 metadata and adds optional safe usage
-error guidance from PR #10. Existing response shapes remain valid. Management
+error guidance from PR #10. Existing response shapes remain valid. PR #13 opens
+the `CustomerError` envelope (`additionalProperties: true`) so older clients
+tolerate new members; this SDK ignores members it does not recognize. Management
 usage and entitlement operations are not exposed by this customer SDK.
 
 The snapshot includes backend-only lifecycle and erasure operations. This

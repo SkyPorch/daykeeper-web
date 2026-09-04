@@ -138,3 +138,39 @@ test("only boolean retry hints override legacy read inference; no hint authorize
     }
   }
 });
+
+test("an open error envelope keeps its typed error and safe nextAction hint", async () => {
+  for (const [hint, expected] of [
+    ["review_usage", "review_usage"],
+    ["review_setup", "review_setup"],
+    ["refresh_conversation", "refresh_conversation"],
+    ["synthetic-private-hint", undefined],
+    [42, undefined],
+    [undefined, undefined],
+  ] as const) {
+    const client = createDaykeeperWebClient({
+      baseUrl: "https://support.example.test",
+      getAccessToken: () => "synthetic-customer",
+      fetch: async () =>
+        Response.json(
+          {
+            error: "daykeeper_usage_limit_exceeded",
+            retryable: false,
+            nextAction: hint,
+            // A newer gateway may add members this SDK has never seen.
+            unknownFutureField: { synthetic: "private-future-data" },
+          },
+          { status: 429 },
+        ),
+    });
+    await assert.rejects(client.getUnread(), (error) => {
+      assert(error instanceof DaykeeperWebApiError);
+      assert.equal(error.status, 429);
+      assert.equal(error.code, "daykeeper_usage_limit_exceeded");
+      assert.equal(error.retryable, false);
+      assert.equal(error.nextAction, expected);
+      assert(!JSON.stringify(error).includes("synthetic"));
+      return true;
+    });
+  }
+});

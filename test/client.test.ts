@@ -19,6 +19,20 @@ const makeClient = (options: Partial<DaykeeperWebClientOptions> = {}) =>
     ...options,
   });
 
+/**
+ * The SDK hands its transport one hardened Request and no RequestInit. Inspect
+ * that object directly: copying it through `new Request(...)` drops fields such
+ * as `referrerPolicy` on some Fetch implementations, which would hide part of
+ * the policy the SDK actually dispatched.
+ */
+const dispatchedRequest = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Request =>
+  input instanceof Request && init === undefined
+    ? input
+    : new Request(input as RequestInfo, init);
+
 function isConfiguration(error: unknown): boolean {
   assert(error instanceof DaykeeperWebTransportError);
   assert.equal(error.code, "INVALID_CONFIGURATION");
@@ -51,7 +65,7 @@ test("every method has the contract URL, verb, payload and browser request polic
     baseUrl: `${baseUrl}///`,
     getAccessToken: () => `${syntheticToken}-${++tokenCalls}`,
     fetch: async (input, init) => {
-      requests.push(new Request(input, init));
+      requests.push(dispatchedRequest(input, init));
       return Response.json({ ok: true });
     },
   });
@@ -116,8 +130,9 @@ test("token providers are called per request without a shared identity/token cac
   const sent: string[] = [];
   const client = makeClient({
     getAccessToken: () => activeToken,
-    fetch: async (_input, init) => {
-      sent.push(new Headers(init?.headers).get("authorization")!);
+    // The SDK dispatches a hardened Request, so read the header from it.
+    fetch: async (input) => {
+      sent.push(dispatchedRequest(input).headers.get("authorization")!);
       return success();
     },
   });
@@ -131,7 +146,7 @@ test("token providers are called per request without a shared identity/token cac
 test("independent clients retain independent gateway and customer providers", async () => {
   const sent: Request[] = [];
   const fetchImpl: typeof fetch = async (input, init) => {
-    sent.push(new Request(input, init));
+    sent.push(dispatchedRequest(input, init));
     return success();
   };
   await Promise.all([
@@ -166,7 +181,7 @@ test("GET refreshes once after 401 within the original signal and browser policy
       return context.forceRefresh ? "fresh-token" : "stale-token";
     },
     fetch: async (input, init) => {
-      sent.push(new Request(input, init));
+      sent.push(dispatchedRequest(input, init));
       return sent.length === 1
         ? Response.json({ error: "expired_token" }, { status: 401 })
         : success();
@@ -631,4 +646,70 @@ test("buffered custom Fetch responses are also capped in UTF-8 bytes", async () 
     assert.equal(error.code, "RESPONSE_TOO_LARGE");
     return true;
   });
+});
+
+test("an injected Fetch receives the browser transport policy on the Request itself", async () => {
+  const dispatched: Request[] = [];
+  const client = makeClient({
+    // A transport that ignores RequestInit entirely still cannot relax the
+    // policy: it is baked into the Request the SDK hands it.
+    fetch: async (input) => {
+      assert(input instanceof Request);
+      dispatched.push(input);
+      return success();
+    },
+  });
+  await client.getUnread();
+  await client.sendMessage(42, "Hello from a customer.");
+  assert.equal(dispatched.length, 2);
+  for (const request of dispatched) {
+    assert.equal(request.redirect, "error");
+    assert.equal(request.credentials, "omit");
+    assert.equal(request.cache, "no-store");
+    assert.equal(request.referrerPolicy, "no-referrer");
+    assert.equal(
+      request.headers.get("authorization"),
+      `Bearer ${syntheticToken}`,
+    );
+  }
+  assert.deepEqual(
+    dispatched.map((request) => [
+      request.method,
+      new URL(request.url).pathname,
+    ]),
+    [
+      ["GET", "/support-api/v1/unread"],
+      ["POST", "/support-api/v1/conversations/42/messages"],
+    ],
+  );
+});
+
+test("a caller-built Request cannot relax the browser transport policy", async () => {
+  const dispatched: Request[] = [];
+  // Built the way a caller might, this Request is relaxed on every axis, which
+  // is what the SDK has to override rather than inherit.
+  const relaxed = new Request(`${baseUrl}/v1/unread`, {
+    redirect: "follow",
+    credentials: "include",
+    cache: "default",
+    referrerPolicy: "unsafe-url",
+  });
+  assert.equal(relaxed.redirect, "follow");
+  assert.equal(relaxed.credentials, "include");
+  assert.equal(relaxed.referrerPolicy, "unsafe-url");
+  const client = makeClient({
+    fetch: async (input, init) => {
+      const request = dispatchedRequest(input, init);
+      assert.equal(request.redirect, "error");
+      assert.equal(request.credentials, "omit");
+      assert.equal(request.referrerPolicy, "no-referrer");
+      dispatched.push(request);
+      return success();
+    },
+  });
+  await client.getUnread();
+  assert.equal(dispatched.length, 1);
+  assert.equal(dispatched[0]!.redirect, "error");
+  assert.equal(dispatched[0]!.credentials, "omit");
+  assert.equal(dispatched[0]!.referrerPolicy, "no-referrer");
 });

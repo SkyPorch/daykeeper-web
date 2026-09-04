@@ -174,6 +174,7 @@ await writeFile(
 const context = vm.createContext({
   fetch,
   Headers,
+  Request,
   URL,
   AbortController,
   TextDecoder,

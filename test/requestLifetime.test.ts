@@ -123,8 +123,8 @@ test("a transport that ignores abort cannot outlive the deadline", async (t) => 
   let discarded = false;
   const request = makeRequest({
     timeoutMs: 1000,
-    fetch: async (_url, init) => {
-      transportSignal = init?.signal ?? undefined;
+    fetch: async (input) => {
+      transportSignal = (input as Request).signal;
       started.resolve();
       return transport.promise;
     },
