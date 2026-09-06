@@ -221,7 +221,13 @@ test("a second 401 is returned as a redacted auth error without a third attempt"
 
 test("API-only widget operations expose the safe refusal code without replay or leakage", async () => {
   const requests: Request[] = [];
+  let tokenCalls = 0;
   const client = makeClient({
+    getAccessToken: ({ forceRefresh }) => {
+      tokenCalls++;
+      assert.equal(forceRefresh, false);
+      return syntheticToken;
+    },
     fetch: async (input, init) => {
       requests.push(new Request(input, init));
       return Response.json(
@@ -229,6 +235,7 @@ test("API-only widget operations expose the safe refusal code without replay or 
           error: "widget_unavailable",
           message: "synthetic-private-provider-body",
           diagnostic: "synthetic-private-diagnostic",
+          retryable: true,
         },
         { status: 409 },
       );
@@ -249,6 +256,7 @@ test("API-only widget operations expose the safe refusal code without replay or 
       return true;
     });
   }
+  assert.equal(tokenCalls, 2);
   assert.equal(requests.length, 2);
   assert.deepEqual(
     requests.map((request) => [

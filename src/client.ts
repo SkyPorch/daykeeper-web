@@ -245,11 +245,13 @@ export class DaykeeperWebClient {
           payload = await readJson(response, lifetime);
         }
         if (!response.ok) {
+          const code = isRecord(payload) ? payload.error : undefined;
           throw new DaykeeperWebApiError({
             status: response.status,
-            code: isRecord(payload) ? payload.error : undefined,
+            code,
             retryable:
               !mutating &&
+              code !== "widget_unavailable" &&
               (isRecord(payload) && typeof payload.retryable === "boolean"
                 ? payload.retryable
                 : response.status === 408 ||
