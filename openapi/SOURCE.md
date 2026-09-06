@@ -2,10 +2,10 @@
 
 `customer.yaml` is an exact copy of `openapi/customer.yaml` from
 `SkyPorch/daykeeper-openapi`, commit
-`e62cfd25228565b15fe169cd7b65a3279932b59f` (usage contracts, PR #11).
+`a4f123969e3e0e005c0a4858fee7bff17cd5a180` (API-only channel contract).
 
-- SHA-256: `b62dd386a87380f3fe94f968ff8fedf703ca6079199ea74057d32e31f91e1fec`
-- Source Git blob: `2f1b48fedaddfb7335389f75640e5e3b301575fb`
+- SHA-256: `322158cd5fa5c54a054d701ff64a9c8b07cad477414d7df83ba5a3aa7ee06cc3`
+- Source Git blob: `bf566c97a541ac5e4e1f04670fb3b65475b635a6`
 - Tag status: unreleased commit snapshot; no new upstream tag is claimed.
 
 The released baseline is tag `v1.0.0`, commit

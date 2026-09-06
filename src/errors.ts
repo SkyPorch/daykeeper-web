@@ -28,6 +28,7 @@ const SAFE_API_CODES = new Set([
   "not_found",
   "support_upstream_rejected",
   "support_upstream_unavailable",
+  "widget_unavailable",
   "daykeeper_usage_limit_exceeded",
   "daykeeper_usage_not_enabled",
   "daykeeper_support_not_ready",

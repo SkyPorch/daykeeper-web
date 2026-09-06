@@ -2,6 +2,8 @@
 
 ## 0.1.0 — unreleased
 
+- Preserve the safe `widget_unavailable` code for API-only widget operations;
+  refuse automatic replay and update the exact customer contract to PR #21.
 - Preserve the five safe managed usage error codes and explicit boolean retry
   advice for reads. Writes remain non-retryable, with uncertain outcomes intact.
 - Honor explicit non-retry advice before a 401 token refresh; bound that body

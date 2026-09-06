@@ -12,15 +12,15 @@ const source = await readFile(join(root, "openapi/SOURCE.md"), "utf8");
 const checksum = createHash("sha256").update(contract).digest("hex");
 assert.equal(
   checksum,
-  "b62dd386a87380f3fe94f968ff8fedf703ca6079199ea74057d32e31f91e1fec",
+  "322158cd5fa5c54a054d701ff64a9c8b07cad477414d7df83ba5a3aa7ee06cc3",
 );
 assert(source.includes(checksum));
-assert(source.includes("e62cfd25228565b15fe169cd7b65a3279932b59f"));
+assert(source.includes("a4f123969e3e0e005c0a4858fee7bff17cd5a180"));
 const blob = createHash("sha1")
   .update(`blob ${contract.length}\0`)
   .update(contract)
   .digest("hex");
-assert.equal(blob, "2f1b48fedaddfb7335389f75640e5e3b301575fb");
+assert.equal(blob, "bf566c97a541ac5e4e1f04670fb3b65475b635a6");
 assert(source.includes(blob));
 assert.match(contract.toString(), /identifier: Apache-2\.0/);
 await mkdir(join(root, ".smoke"), { recursive: true });
