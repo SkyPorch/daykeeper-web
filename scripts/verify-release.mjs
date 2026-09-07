@@ -27,7 +27,12 @@ export function validateRelease({
   )
     throw new Error("Git tag must match package version");
 
-  const commit = source.match(/commit\s+`([0-9a-f]{40})`/i)?.[1];
+  const declarations = [
+    ...source.matchAll(
+      /^`customer\.yaml` is an exact copy of `openapi\/customer\.yaml` from\s+`SkyPorch\/daykeeper-openapi`, commit\s+`([^`\n]+)`[^\n]*$/gm,
+    ),
+  ];
+  const commit = declarations.length === 1 ? declarations[0][1] : undefined;
   if (!commit || !FULL_SHA.test(commit))
     throw new Error(
       "openapi/SOURCE.md must record a full immutable contract commit SHA",

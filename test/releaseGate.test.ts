@@ -36,7 +36,7 @@ const valid = () => ({
     version: "0.2.0",
     private: false,
   },
-  source: `commit \`${"a".repeat(40)}\`\n- SHA-256: \`${checksum}\`\n- Tag status: v0.2.0 (immutable release tag).`,
+  source: `\`customer.yaml\` is an exact copy of \`openapi/customer.yaml\` from\n\`SkyPorch/daykeeper-openapi\`, commit\n\`${"a".repeat(40)}\` (API-only channel contract).\n\n- SHA-256: \`${checksum}\`\n- Tag status: v0.2.0 (immutable release tag).`,
   changelog: "# Changelog\n\n## 0.2.0\n\n### Changes\n",
   contractBytes,
   env: {
@@ -69,6 +69,29 @@ test("release verifier rejects untagged or incomplete contract provenance", () =
   );
   fixture.source = valid().source.replace(checksum, "b".repeat(64));
   assert.throws(() => validateRelease(fixture), /checksum does not match/);
+});
+
+test("release provenance cannot fall back to historical commits", () => {
+  const fixture = valid();
+  const history = `\n\nThe released baseline is tag v1.0.0, commit\n\`${"b".repeat(40)}\`.`;
+  fixture.source += history;
+  assert.equal(validateRelease(fixture).contractCommit, "a".repeat(40));
+  fixture.source = valid().source.replace("a".repeat(40), "a4f1239") + history;
+  assert.throws(
+    () => validateRelease(fixture),
+    /full immutable contract commit SHA/,
+  );
+  fixture.source =
+    valid().source.replace(/commit\s+`a+`/, "commit unavailable") + history;
+  assert.throws(
+    () => validateRelease(fixture),
+    /full immutable contract commit SHA/,
+  );
+  fixture.source = valid().source + "\n\n" + valid().source;
+  assert.throws(
+    () => validateRelease(fixture),
+    /full immutable contract commit SHA/,
+  );
 });
 
 test("release verifier requires a finalized version changelog and matching tag", () => {
