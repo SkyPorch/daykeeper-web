@@ -37,7 +37,15 @@ export function validateRelease({
     throw new Error(
       "openapi/SOURCE.md must record a full immutable contract commit SHA",
     );
-  const tagStatus = source.match(/Tag status:\s*([^\n]+)/i)?.[1] ?? "";
+  // Only the immediately following metadata list belongs to this declaration.
+  // Historical prose/sections cannot supply missing active release evidence.
+  const declaration = declarations[0];
+  const metadata =
+    source
+      .slice(declaration.index + declaration[0].length)
+      .match(/^\s*\n((?:- [^\n]*(?:\n|$))+)/)?.[1] ?? "";
+  const tags = [...metadata.matchAll(/^- Tag status:[ \t]*([^\n]+)$/gim)];
+  const tagStatus = tags.length === 1 ? tags[0][1] : "";
   if (
     !/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\s+\(immutable release tag\)\.?$/i.test(
       tagStatus.trim(),
@@ -46,7 +54,10 @@ export function validateRelease({
     throw new Error(
       "openapi/SOURCE.md must record an immutable release tag, not an unreleased snapshot",
     );
-  const recorded = source.match(/SHA-256:\s*`([0-9a-f]{64})`/i)?.[1];
+  const checksums = [
+    ...metadata.matchAll(/^- SHA-256:[ \t]*`([^`\n]+)`[ \t]*$/gim),
+  ];
+  const recorded = checksums.length === 1 ? checksums[0][1] : undefined;
   if (!recorded || !FULL_CHECKSUM.test(recorded))
     throw new Error("openapi/SOURCE.md must record a full contract checksum");
   const actual = createHash("sha256").update(contractBytes).digest("hex");

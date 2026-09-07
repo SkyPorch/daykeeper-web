@@ -94,6 +94,19 @@ test("release provenance cannot fall back to historical commits", () => {
   );
 });
 
+test("active provenance cannot borrow historical tag or checksum fields", () => {
+  const fixture = valid();
+  const history = `\n\n## Historical release\n\n- Tag status: v0.1.0 (immutable release tag).\n- SHA-256: \`${checksum}\`\n`;
+  fixture.source = valid().source.replace(/^- Tag status:.*$/m, "") + history;
+  assert.throws(() => validateRelease(fixture), /immutable release tag/);
+  fixture.source = valid().source.replace(/^- SHA-256:.*\n/m, "") + history;
+  assert.throws(() => validateRelease(fixture), /full contract checksum/);
+  fixture.source = valid().source + `\n- SHA-256: \`${checksum}\``;
+  assert.throws(() => validateRelease(fixture), /full contract checksum/);
+  fixture.source = valid().source + history;
+  assert.doesNotThrow(() => validateRelease(fixture));
+});
+
 test("release verifier requires a finalized version changelog and matching tag", () => {
   const fixture = valid();
   fixture.changelog = "# Changelog\n\n## 0.2.0 — unreleased\n";
