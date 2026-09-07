@@ -2,10 +2,10 @@
 
 ## Version and contract compatibility
 
-| Package version                               | Customer contract | Management contract                                                           | Contract tag                                                                                  | Contract commit                                                                        |
-| --------------------------------------------- | ----------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `@skyporch/daykeeper-web` 0.2.0 (unreleased)  | 0.1.0             | not consumed (gateway management contract 0.2.0 is unrelated to this package) | none yet — snapshot is an untagged commit; a released tag must be recorded before publication | `4a2b82c9b23503073dc26fdeb5163e8869d007b8` (`SkyPorch/daykeeper-openapi`, PR #13 head) |
-| `@skyporch/daykeeper-web` 0.1.0 (unpublished) | 0.1.0             | not consumed                                                                  | `v1.0.0`                                                                                      | `35f5bd45fe0c6a6901766543bff90dae6838b965`                                             |
+| Package version                               | Customer contract | Management contract                                                           | Contract tag                                                                                  | Contract commit                                                                                      |
+| --------------------------------------------- | ----------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `@skyporch/daykeeper-web` 0.2.0 (unreleased)  | 0.1.0             | not consumed (gateway management contract 0.2.0 is unrelated to this package) | none yet — snapshot is an untagged commit; a released tag must be recorded before publication | `a4f123969e3e0e005c0a4858fee7bff17cd5a180` (`SkyPorch/daykeeper-openapi`, API-only channel contract) |
+| `@skyporch/daykeeper-web` 0.1.0 (unpublished) | 0.1.0             | not consumed                                                                  | `v1.0.0`                                                                                      | `35f5bd45fe0c6a6901766543bff90dae6838b965`                                                           |
 
 This package vendors the **customer** contract (`openapi/customer.yaml`), which
 is still at 0.1.0. The `Idempotency-Key` request header that becomes REQUIRED on
