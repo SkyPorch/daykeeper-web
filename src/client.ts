@@ -263,6 +263,8 @@ export class DaykeeperWebClient {
             nextAction: isRecord(payload) ? payload.nextAction : undefined,
             retryable:
               !mutating &&
+              (isRecord(payload) ? payload.error : undefined) !==
+                "widget_unavailable" &&
               (isRecord(payload) && typeof payload.retryable === "boolean"
                 ? payload.retryable
                 : response.status === 408 ||
