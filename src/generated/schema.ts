@@ -11,7 +11,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get widget-safe customer identity */
+        /**
+         * Get widget-safe customer identity
+         * @description API-only inbox gateways authenticate the customer token and return `409`
+         *     `{ "error": "widget_unavailable" }` before calling the conversation
+         *     provider. Use a widget-enabled tenant gateway for this operation.
+         */
         get: operations["getCustomerIdentity"];
         put?: never;
         post?: never;
@@ -114,6 +119,10 @@ export interface paths {
          * Claim a signed-out widget conversation after sign-in
          * @description The widget token proves possession of the anonymous thread. The gateway
          *     refuses identified, foreign-tenant, or email-mismatched contacts.
+         *
+         *     API-only inbox gateways authenticate the token and return `409`
+         *     `{ "error": "widget_unavailable" }` before calling the conversation
+         *     provider. Use a widget-enabled tenant gateway for this operation.
          */
         post: operations["claimAnonymousConversation"];
         delete?: never;
@@ -336,6 +345,15 @@ export interface components {
                 "application/json": components["schemas"]["CustomerError"];
             };
         };
+        /** @description API-only inbox gateways do not support widget identity or anonymous-conversation claims. */
+        WidgetUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["CustomerError"];
+            };
+        };
     };
     parameters: {
         ConversationId: number;
@@ -365,6 +383,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+            409: components["responses"]["WidgetUnavailable"];
             default: components["responses"]["Error"];
         };
     };
@@ -536,6 +555,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+            409: components["responses"]["WidgetUnavailable"];
             default: components["responses"]["Error"];
         };
     };

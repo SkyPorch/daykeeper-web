@@ -234,6 +234,57 @@ test("a second 401 is returned as a redacted auth error without a third attempt"
   assert.deepEqual(refresh, [false, true]);
 });
 
+test("API-only widget operations expose the safe refusal code without replay or leakage", async () => {
+  const requests: Request[] = [];
+  let tokenCalls = 0;
+  const client = makeClient({
+    getAccessToken: ({ forceRefresh }) => {
+      tokenCalls++;
+      assert.equal(forceRefresh, false);
+      return syntheticToken;
+    },
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json(
+        {
+          error: "widget_unavailable",
+          message: "synthetic-private-provider-body",
+          diagnostic: "synthetic-private-diagnostic",
+          retryable: true,
+        },
+        { status: 409 },
+      );
+    },
+  });
+  for (const operation of [
+    () => client.getIdentity(),
+    () => client.claimAnonymousConversation("synthetic-widget-token"),
+  ]) {
+    await assert.rejects(operation(), (error) => {
+      assert(error instanceof DaykeeperWebApiError);
+      assert.equal(error.status, 409);
+      assert.equal(error.code, "widget_unavailable");
+      assert.equal(error.retryable, false);
+      assert.equal(error.outcomeUnknown, false);
+      assert(!JSON.stringify(error).includes("synthetic-private"));
+      assert(!String(error.stack).includes("synthetic-private"));
+      return true;
+    });
+  }
+  assert.equal(tokenCalls, 2);
+  assert.equal(requests.length, 2);
+  assert.deepEqual(
+    requests.map((request) => [
+      request.method,
+      request.headers.get("authorization"),
+    ]),
+    [
+      ["GET", "Bearer synthetic-customer-token"],
+      ["POST", "Bearer synthetic-customer-token"],
+    ],
+  );
+});
+
 for (const status of [403, 404, 429, 502]) {
   test(`GET ${status} does not refresh, switch tenant, or automatically replay`, async () => {
     let tokenCalls = 0;

@@ -79,6 +79,14 @@ safe integers. Anonymous claim does not bootstrap an anonymous widget or create
 a widget token. The exact OpenAPI snapshot includes backend lifecycle/erasure
 routes, but those routes are intentionally not exposed by this client.
 
+API-only gateways expose conversation APIs but not the embedded widget
+experience: `getIdentity()` and `claimAnonymousConversation()` require a
+widget-enabled tenant and return HTTP 409 with the safe `widget_unavailable`
+code on an API-only gateway. API-only routes also reject browser Origin headers;
+this SDK does not bypass that restriction. Browser integrations require a
+website inbox with an admitted origin. Use a native client for API-only mobile
+integrations.
+
 Returned content is untrusted customer/agent data. Render plain text safely;
 do not insert messages into `innerHTML`. A future visual messenger must supply
 its own reviewed rendering, accessibility, attachment, and navigation policies.
@@ -136,6 +144,9 @@ reviewed, localized guidance based on these codes. Keep an unsent message
 visible and let customers read existing conversations. Do not show a successful
 send, offer automatic quota upgrades, or display raw server messages/URLs.
 An uncertain write needs reconciliation, not an automatic resend.
+
+`widget_unavailable` is a non-retryable mode error. Do not refresh credentials,
+retry, or switch tenants automatically when an API-only gateway returns it.
 
 ## Browser integration
 
