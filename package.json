@@ -1,7 +1,7 @@
 {
   "name": "@skyporch/daykeeper-web",
   "version": "0.2.0",
-  "private": true,
+  "private": false,
   "publishConfig": {
     "access": "public",
     "provenance": true

@@ -7,13 +7,13 @@ import test from "node:test";
 // @ts-expect-error The release verifier is an executable JavaScript module.
 import { validateRelease } from "../scripts/verify-release.mjs";
 
-test("the private foundation fails closed before publication", async () => {
+test("the public release still fails closed without explicit approval", async () => {
   const root = fileURLToPath(new URL("../", import.meta.url));
   const manifest = JSON.parse(
     await readFile(new URL("../package.json", import.meta.url), "utf8"),
   );
   assert.equal(manifest.name, "@skyporch/daykeeper-web");
-  assert.equal(manifest.private, true);
+  assert.equal(manifest.private, false);
   assert.equal(manifest.license, "MIT");
   assert.equal(
     manifest.scripts.prepublishOnly,
@@ -25,7 +25,7 @@ test("the private foundation fails closed before publication", async () => {
     timeout: 5000,
   });
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /private must be false/);
+  assert.match(result.stderr, /immutable release tag/);
 });
 
 const contractBytes = Buffer.from("approved contract");

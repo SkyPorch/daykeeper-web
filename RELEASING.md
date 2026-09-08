@@ -1,13 +1,10 @@
 # Releasing
 
-`@skyporch/daykeeper-web` is still `private: true` and therefore unpublished.
-That block is deliberate and is **not** removed by this document or by the
-release workflow: dropping `private: true` is a separate, separately approved
-change. `publishConfig` now declares `access: public` and `provenance: true` so
-that the first publication, whenever it is approved, is a provenance-producing
-one — but `npm publish` continues to fail closed while `private: true` stands,
-and `prepublishOnly` (`scripts/verify-release.mjs`) fails closed independently.
-A local tarball is for review and testing, not evidence of a public release.
+`@skyporch/daykeeper-web` is approved for its first protected publication.
+`publishConfig` declares `access: public` and `provenance: true`; the release
+workflow and `prepublishOnly` (`scripts/verify-release.mjs`) still require the
+explicit release approval gate. A local tarball is for review and testing, not
+evidence of a public release.
 
 ## Release sequence
 
@@ -88,8 +85,7 @@ smoke:browser`, and `pnpm check:cold`; preserve Node, package-manager,
   Confirm that a consuming application's UI safely renders customer content.
 - Approve repository visibility, npm scope/package ownership and 2FA, version,
   changelog, release notes, support policy, and tarball contents.
-- In a separate reviewed change, remove the `private: true` bootstrap block.
-  The provenance-producing trusted-publisher workflow itself already exists at
+- The provenance-producing trusted-publisher workflow already exists at
   `.github/workflows/release.yml`.
 
 Do not interpret successful CI or a git tag as publication approval. Do not

@@ -15,7 +15,7 @@ assert.equal(
   "322158cd5fa5c54a054d701ff64a9c8b07cad477414d7df83ba5a3aa7ee06cc3",
 );
 assert(source.includes(checksum));
-assert(source.includes("a4f123969e3e0e005c0a4858fee7bff17cd5a180"));
+assert(source.includes("c9a0175d0053f1a2d57c9329f6d3a36ec6acdb71"));
 const blob = createHash("sha1")
   .update(`blob ${contract.length}\0`)
   .update(contract)
