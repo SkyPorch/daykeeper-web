@@ -44,6 +44,4 @@ for (const file of ["index.js", "index.cjs"]) {
     "Runtime bundle must not persist credentials",
   );
 }
-console.log(
-  "ESM/CJS exports, declarations and browser-only runtime verified",
-);
+console.log("ESM/CJS exports, declarations and browser-only runtime verified");
