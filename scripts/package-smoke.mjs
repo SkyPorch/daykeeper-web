@@ -98,7 +98,7 @@ const installed = JSON.parse(
   await readFile(join(installedRoot, "package.json"), "utf8"),
 );
 assert.equal(installed.name, manifest.name);
-assert.equal(installed.private, true);
+assert.equal(installed.private, false);
 assert.equal(installed.license, "MIT");
 assert.deepEqual(installed.dependencies ?? {}, {});
 for (const name of [
@@ -283,7 +283,7 @@ try {
 const result = {
   package: manifest.name,
   version: manifest.version,
-  private: true,
+  private: false,
   node: process.version,
   tarballSha256: hash,
   tarball,
