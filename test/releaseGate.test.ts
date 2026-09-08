@@ -19,10 +19,13 @@ test("the public release still fails closed without explicit approval", async ()
     manifest.scripts.prepublishOnly,
     "node scripts/verify-release.mjs",
   );
+  const { DAYKEEPER_RELEASE_APPROVED: _approval, ...withoutApproval } =
+    process.env;
   const result = spawnSync(process.execPath, ["scripts/verify-release.mjs"], {
     cwd: root,
     encoding: "utf8",
     timeout: 5000,
+    env: withoutApproval,
   });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /immutable release tag/);
