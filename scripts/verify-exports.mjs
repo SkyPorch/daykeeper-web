@@ -6,7 +6,6 @@ const manifest = JSON.parse(
   await readFile(new URL("../package.json", import.meta.url), "utf8"),
 );
 assert.equal(manifest.name, "@skyporch/daykeeper-web");
-assert.equal(manifest.private, true, "This foundation must remain unpublished");
 assert.equal(manifest.license, "MIT");
 assert.equal(manifest.sideEffects, false);
 assert.deepEqual(manifest.dependencies ?? {}, {});
@@ -45,6 +44,4 @@ for (const file of ["index.js", "index.cjs"]) {
     "Runtime bundle must not persist credentials",
   );
 }
-console.log(
-  "ESM/CJS exports, declarations, private package gate and browser-only runtime verified",
-);
+console.log("ESM/CJS exports, declarations and browser-only runtime verified");

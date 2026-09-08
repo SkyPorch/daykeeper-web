@@ -4,9 +4,9 @@ A headless browser client for customer-facing Daykeeper support experiences.
 It provides typed customer operations, not a visual messenger, installation
 snippet, React wrapper, or administrative API.
 
-**Unreleased foundation:** this repository and package remain private. Version
-`0.2.0` is a local candidate, not an npm release. Publishing is explicitly
-blocked pending review and the gates in [RELEASING.md](RELEASING.md).
+Version `0.2.0` is the first approved public release candidate. Publication is
+performed only by the protected release workflow after the gates in
+[RELEASING.md](RELEASING.md) are satisfied.
 
 ## Evaluate locally
 
