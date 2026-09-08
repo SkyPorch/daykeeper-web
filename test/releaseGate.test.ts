@@ -28,7 +28,7 @@ test("the public release still fails closed without explicit approval", async ()
     env: withoutApproval,
   });
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /immutable release tag/);
+  assert.match(result.stderr, /DAYKEEPER_RELEASE_APPROVED=1/);
 });
 
 const contractBytes = Buffer.from("approved contract");
