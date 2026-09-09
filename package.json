@@ -74,11 +74,11 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "22.20.1",
-    "esbuild": "0.28.1",
+    "esbuild": "0.28.2",
     "openapi-typescript": "7.13.0",
     "prettier": "3.9.6",
     "tsup": "8.5.1",
-    "tsx": "4.23.12",
+    "tsx": "4.23.13",
     "typescript": "5.9.3"
   },
   "keywords": [
@@ -90,7 +90,7 @@
   ],
   "pnpm": {
     "overrides": {
-      "esbuild": "0.28.1"
+      "esbuild": "0.28.2"
     },
     "onlyBuiltDependencies": [
       "esbuild"
