@@ -231,10 +231,13 @@ export class VisitorSession {
     ) {
       throw new MessengerError("temporarily_unavailable", { retryable: true });
     }
-    const gatewayUrl =
-      typeof data.gatewayUrl === "string" && data.gatewayUrl
-        ? data.gatewayUrl.replace(/\/+$/, "")
-        : this.#options.gatewayUrl;
+    // The session answer may only name a gateway on the same origin the site
+    // configured; anything else is ignored, so a tampered response can never
+    // send the visitor's token or messages somewhere else.
+    const gatewayUrl = sameOriginGateway(
+      data.gatewayUrl,
+      this.#options.gatewayUrl,
+    );
     return {
       token,
       expiresAt: parseExpiry(data.expiresAt, token, this.#now()),
@@ -329,4 +332,25 @@ function jwtLifetime(token: string): number {
   if (typeof exp !== "number" || typeof iat !== "number") return NaN;
   // Bounded: never trust more than an hour, whatever the claims say.
   return Math.min((exp - iat) * 1000, 3_600_000);
+}
+
+/** `candidate` if it is an http(s) URL on `configured`'s origin, else `configured`. */
+function sameOriginGateway(candidate: unknown, configured: string): string {
+  if (typeof candidate !== "string" || !candidate || candidate.length > 2048)
+    return configured;
+  try {
+    const url = new URL(candidate);
+    const base = new URL(configured);
+    if (
+      url.origin !== base.origin ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    )
+      return configured;
+    return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
+  } catch {
+    return configured;
+  }
 }

@@ -266,3 +266,36 @@ test("parseExpiry accepts ISO, seconds, milliseconds and the JWT exp", () => {
   );
   assert.equal(parseExpiry(iso(now - 1), "opaque", now), now + 240_000);
 });
+
+test("a session answer can never move the gateway to another origin", async () => {
+  for (const gatewayUrl of [
+    "https://evil.example.test",
+    "http://gateway.example.test",
+    "https://gateway.example.test.evil.test",
+    "https://user:pass@gateway.example.test",
+    "https://gateway.example.test/?x=1",
+    "javascript:alert(1)",
+    42,
+  ]) {
+    const { session } = harness(() =>
+      Response.json(
+        grantBody({ id: V1, secret: S1 }, iso(1_800_000_300_000), {
+          gatewayUrl,
+        }),
+        { status: 201 },
+      ),
+    );
+    const grant = await session.ensure();
+    assert.equal(grant.gatewayUrl, GATEWAY, String(gatewayUrl));
+  }
+  // The same origin with a path prefix is kept, without a trailing slash.
+  const { session } = harness(() =>
+    Response.json(
+      grantBody({ id: V1, secret: S1 }, iso(1_800_000_300_000), {
+        gatewayUrl: `${GATEWAY}/cell-a/`,
+      }),
+      { status: 201 },
+    ),
+  );
+  assert.equal((await session.ensure()).gatewayUrl, `${GATEWAY}/cell-a`);
+});
