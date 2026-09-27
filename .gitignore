@@ -8,3 +8,6 @@ coverage/
 .env
 .env.*
 !.env.example
+messenger/release/
+messenger/test-results/
+messenger/playwright-report/

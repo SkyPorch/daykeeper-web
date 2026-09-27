@@ -6,3 +6,6 @@ pnpm-lock.yaml
 openapi/customer.yaml
 openapi/LICENSE
 src/generated/schema.ts
+messenger/release/
+messenger/test-results/
+messenger/playwright-report/

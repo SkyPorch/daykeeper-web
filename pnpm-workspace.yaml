@@ -1,0 +1,5 @@
+# The root package is the published headless SDK. `messenger/` is a private
+# package that bundles it into the hosted visual messenger; it is never
+# published to npm.
+packages:
+  - messenger

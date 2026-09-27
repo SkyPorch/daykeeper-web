@@ -24,6 +24,7 @@ assert.deepEqual(await readdir(store), [], "Dependency store must start empty");
 const names = [
   "package.json",
   "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
   "tsconfig.json",
   ".gitignore",
   ".prettierignore",
@@ -39,7 +40,17 @@ const names = [
   "test",
   "scripts",
   "openapi",
+  // The private messenger workspace package shares the lockfile.
+  "messenger",
 ];
+// Local build/test output inside copied directories is never source.
+const generated = new Set([
+  "node_modules",
+  "dist",
+  "release",
+  "test-results",
+  "playwright-report",
+]);
 async function copyChecked(from, to) {
   const info = await lstat(from);
   assert(
@@ -49,7 +60,8 @@ async function copyChecked(from, to) {
   if (info.isDirectory()) {
     await mkdir(to);
     for (const name of await readdir(from))
-      await copyChecked(join(from, name), join(to, name));
+      if (!generated.has(name))
+        await copyChecked(join(from, name), join(to, name));
   } else {
     assert(info.isFile());
     await copyFile(from, to);

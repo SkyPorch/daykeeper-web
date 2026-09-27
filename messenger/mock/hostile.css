@@ -1,0 +1,52 @@
+/* Deliberately hostile host styles. None of this may change the messenger. */
+* {
+  all: unset !important;
+}
+html,
+body {
+  display: block !important;
+  font:
+    40px/3 "Comic Sans MS",
+    cursive !important;
+  color: red !important;
+  background: yellow !important;
+}
+body > * {
+  transform: rotate(2deg) translateZ(0) !important;
+  filter: blur(0.4px) !important;
+}
+daykeeper-messenger {
+  display: none !important;
+  position: static !important;
+  z-index: -1 !important;
+  opacity: 0 !important;
+  transform: scale(0.1) !important;
+  filter: invert(1) !important;
+}
+daykeeper-messenger * {
+  color: lime !important;
+}
+button,
+textarea,
+div,
+section,
+span,
+svg,
+path {
+  font-size: 50px !important;
+  background: magenta !important;
+  border: 10px solid cyan !important;
+  margin: 30px !important;
+}
+*,
+*::before,
+*::after {
+  --accent: lime !important;
+  --bg: red !important;
+  --text: yellow !important;
+  --dk-z: -5 !important;
+  box-sizing: content-box !important;
+}
+:root {
+  --font: "Comic Sans MS" !important;
+}
