@@ -70,7 +70,7 @@
   "bugs": {
     "url": "https://github.com/SkyPorch/daykeeper-web/issues"
   },
-  "homepage": "https://github.com/SkyPorch/daykeeper-web#readme",
+  "homepage": "https://www.mydaykeeper.com",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "22.20.1",
