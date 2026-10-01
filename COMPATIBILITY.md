@@ -100,7 +100,8 @@ It is not provisioned by this package.
 
 ## Deliberate exclusions
 
-There is no visual messenger, install snippet, React wrapper, customer signup,
+This package has no visual messenger or install snippet (Daykeeper Messenger in
+`messenger/` provides those separately), and no React wrapper, customer signup,
 OAuth/billing/management-key UI, push setup, attachment upload, realtime socket,
 offline queue, background retry, analytics, or lifecycle/erasure method here.
 Generated types do not perform runtime response-schema validation. JSON is
