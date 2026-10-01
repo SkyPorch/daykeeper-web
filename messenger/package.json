@@ -1,6 +1,6 @@
 {
   "name": "@skyporch/daykeeper-messenger",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Hosted Daykeeper web messenger (IIFE bundle served from the Daykeeper CDN)",
   "type": "module",
