@@ -1,3 +1,4 @@
+import { poweredByUrl } from "./branding.ts";
 import { onColor } from "./color.ts";
 import {
   MAX_MESSAGE_LENGTH,
@@ -499,7 +500,7 @@ export class MessengerView {
         d,
         "a",
         {
-          href: "https://mydaykeeper.com",
+          href: poweredByUrl(this.#win.location.hostname),
           target: "_blank",
           rel: "noopener noreferrer",
         },

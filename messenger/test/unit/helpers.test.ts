@@ -6,6 +6,7 @@ import {
   normalizeGatewayUrl,
   parseBootOptions,
 } from "../../src/api.ts";
+import { poweredByUrl } from "../../src/branding.ts";
 import { contrast, onColor } from "../../src/color.ts";
 import { parseRichText, safeHref } from "../../src/richText.ts";
 import { relativeTime, toMillis } from "../../src/time.ts";
@@ -149,4 +150,21 @@ test("accent text colour meets the better contrast", () => {
   assert.equal(onColor("#ffe45c"), "#000000");
   assert.equal(onColor("#2d4a3e"), "#ffffff");
   assert.ok(contrast("#2d4a3e", "#ffffff") > 4.5);
+});
+
+test("the Powered by link is tagged as a widget referral from the host site", () => {
+  assert.equal(
+    poweredByUrl("support.attachedapp.com"),
+    "https://www.mydaykeeper.com/widget?ref=widget&utm_source=support.attachedapp.com&utm_medium=widget&utm_campaign=branding",
+  );
+  // A page without a host (a file:// preview) still carries the ref.
+  assert.equal(
+    poweredByUrl(""),
+    "https://www.mydaykeeper.com/widget?ref=widget&utm_medium=widget&utm_campaign=branding",
+  );
+  // The host is encoded, never spliced into the URL.
+  const url = new URL(poweredByUrl("a.test&ref=other#x"));
+  assert.equal(url.searchParams.get("ref"), "widget");
+  assert.equal(url.searchParams.get("utm_source"), "a.test&ref=other#x");
+  assert.equal(url.hash, "");
 });
