@@ -575,20 +575,134 @@ test("a higher-id local send cannot skip unread messages on the next poll", asyn
       message(index + 22, "agent", `unread ${index + 22}`),
     ),
   );
+  const listReadsBeforeSend = t.count("listMessages");
   await t.controller.send("local reply");
   const localReplyId = t.controller.state.thread.at(-1)?.id;
   assert.ok(localReplyId! > 30);
   await t.clock.advance(POLL.threadActive);
-  const latestPoll = t.calls
+  const pollReads = t.calls
     .filter((call) => call.method === "listMessages")
-    .at(-1)!;
-  assert.deepEqual(latestPoll.args, [7, { after: 21 }]);
+    .slice(listReadsBeforeSend);
+  assert.deepEqual(pollReads[0]!.args, [7, { after: 21 }]);
+  assert.deepEqual(pollReads.at(-1)!.args, [7, { after: localReplyId }]);
   assert.ok(
     t.controller.state.thread.some((entry) => entry.content === "unread 22"),
   );
   assert.ok(
     t.controller.state.thread.some((entry) => entry.content === "unread 30"),
   );
+});
+
+test("catches up through every forward page before marking the thread seen", async () => {
+  const t = setup({ stored: true, hasConversation: true });
+  const records = Array.from({ length: 65 }, (_, index) =>
+    message(index + 1, "agent", `reply ${index + 1}`),
+  );
+  t.handlers.listMessages = (_id: number, opts: { after?: number }) => {
+    if (opts.after === undefined)
+      return { pagination: "cursor", messages: [records[0]!] };
+    return {
+      pagination: "cursor",
+      messages: records.filter((entry) => entry.id > opts.after!).slice(0, 20),
+    };
+  };
+  t.controller.open();
+  await t.clock.flush();
+  t.controller.openConversation(7);
+  await t.clock.flush();
+
+  const reads = t.calls.filter((call) => call.method === "listMessages");
+  const seenIndex = t.calls.findIndex(
+    (call) => call.method === "markConversationSeen",
+  );
+  assert.equal(reads.length, 6); // Initial + four data pages + empty exhaustion page.
+  assert.deepEqual(reads.at(-1)!.args, [7, { after: 65 }]);
+  assert.equal(t.controller.state.thread.length, 65);
+  const lastListIndex = t.calls
+    .map((call) => call.method)
+    .lastIndexOf("listMessages");
+  assert.ok(seenIndex > lastListIndex);
+});
+
+test("keeps an accepted uncertain send pending until all forward pages are reconciled", async () => {
+  const t = setup({ stored: true, hasConversation: true });
+  t.serverMessages.push(message(1, "agent", "existing"));
+  t.controller.open();
+  await t.clock.flush();
+  t.controller.openConversation(7);
+  await t.clock.flush();
+  t.handlers.listMessages = (_id: number, opts: { after?: number }) => ({
+    pagination: "cursor",
+    messages:
+      opts.after === undefined
+        ? t.serverMessages.slice(-20)
+        : t.serverMessages
+            .filter((entry) => entry.id > opts.after!)
+            .slice(0, 20),
+  });
+  t.handlers.sendMessage = () => {
+    t.serverMessages.push(
+      ...Array.from({ length: 63 }, (_, index) =>
+        message(index + 2, "agent", `provider reply ${index + 2}`),
+      ),
+      message(65, "customer", "accepted despite response loss"),
+    );
+    throw new DaykeeperWebApiError({
+      status: 504,
+      code: "gateway_timeout",
+      outcomeUnknown: true,
+    });
+  };
+
+  await t.controller.send("accepted despite response loss");
+  const pending = t.controller.state.thread.at(-1)!;
+  assert.equal(pending.status, "unconfirmed");
+  await t.clock.advance(POLL.threadActive);
+
+  const pollReads = t.calls
+    .filter((call) => call.method === "listMessages")
+    .slice(1);
+  assert.deepEqual(
+    pollReads.map(({ args }) => args[1]),
+    [
+      { after: 1 },
+      { after: 1 },
+      { after: 21 },
+      { after: 41 },
+      { after: 61 },
+      { after: 65 },
+    ],
+  ); // A retry may repeat the first page; settlement waits for the empty page.
+  assert.deepEqual(pollReads.at(-1)!.args, [7, { after: 65 }]);
+  assert.equal(
+    t.controller.state.thread.at(-1)?.content,
+    "accepted despite response loss",
+  );
+  assert.equal(t.controller.state.thread.at(-1)?.status, "sent");
+  assert.equal(t.count("sendMessage"), 1);
+});
+
+test("a new no-cursor page reopens older-history access after an empty first read", async () => {
+  const t = setup({ stored: true, hasConversation: true });
+  t.controller.open();
+  await t.clock.flush();
+  t.controller.openConversation(7);
+  await t.clock.flush();
+  assert.equal(t.controller.state.historyExhausted, true);
+
+  t.serverMessages.push(
+    message(1, "agent", "arrived later"),
+    message(2, "customer", "follow-up"),
+  );
+  await t.clock.advance(POLL.threadActive);
+  assert.equal(t.controller.state.historyExhausted, false);
+  assert.equal(t.controller.state.historyCursorBefore, 1);
+
+  await t.controller.loadOlderMessages();
+  const beforeRead = t.calls
+    .filter((call) => call.method === "listMessages")
+    .at(-1)!;
+  assert.deepEqual(beforeRead.args, [7, { before: 1 }]);
 });
 
 test("load older messages pages before the oldest visible message and exhausts only on empty", async () => {

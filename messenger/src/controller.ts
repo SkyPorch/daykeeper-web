@@ -113,6 +113,7 @@ export interface ControllerEnvironment {
 }
 
 export const MAX_MESSAGE_LENGTH = 4_000;
+const MAX_FORWARD_PAGES_PER_TICK = 10;
 export const POLL = {
   unreadVisible: 30_000,
   unreadHidden: 120_000,
@@ -732,41 +733,85 @@ export class MessengerController {
     // Customer send responses can have an id above messages that arrived
     // while the thread was open. Advance only from listMessages responses so
     // a local send can never jump over unseen incoming replies.
-    const after = initial
-      ? undefined
-      : (this.#lastFetchedMessageId ?? undefined);
-    const { messages } = await client.listMessages(id, after ? { after } : {});
-    if (threadToken !== this.#threadToken) return;
-    const fetchedId = maximumMessageId(messages);
-    if (fetchedId !== null) this.#lastFetchedMessageId = fetchedId;
-    const mapped = messages
-      .map(toThreadMessage)
-      .filter((entry): entry is ThreadMessage => entry !== null);
-    const known = new Set<number | null>(
-      this.state.thread.map((entry) => entry.id),
-    );
-    const fresh = mapped.filter((entry) => !known.has(entry.id));
-    const thread = settleUnconfirmed(
-      mergeServerMessages(this.state.thread, fresh),
-    );
-    this.#set({
-      thread,
-      threadLoaded: true,
-      historyCursorBefore:
-        initial && messages.length > 0
-          ? minimumMessageId(messages)
-          : this.state.historyCursorBefore,
-      historyExhausted:
-        this.state.historyExhausted || (initial && messages.length === 0),
-    });
-    const incoming = fresh.filter(
-      (entry) => entry.author === "agent" || entry.author === "human",
-    );
-    if (incoming.length) {
-      this.#touch();
-      if (!initial) this.#emit({ type: "incoming", messages: incoming });
+    let after = initial ? undefined : (this.#lastFetchedMessageId ?? undefined);
+    let firstPage = true;
+    let exhaustedForwardPages = false;
+    for (
+      let pageNumber = 0;
+      pageNumber < MAX_FORWARD_PAGES_PER_TICK;
+      pageNumber++
+    ) {
+      const requestedAfter = after;
+      const { messages } = await client.listMessages(
+        id,
+        requestedAfter === undefined ? {} : { after: requestedAfter },
+      );
+      if (threadToken !== this.#threadToken) return;
+      if (messages.length === 0) {
+        if (requestedAfter === undefined) {
+          this.#set({
+            threadLoaded: true,
+            historyCursorBefore: null,
+            historyExhausted: true,
+          });
+        }
+        exhaustedForwardPages = true;
+        break;
+      }
+
+      const fetchedId = maximumMessageId(messages);
+      if (
+        fetchedId === null ||
+        (requestedAfter !== undefined && fetchedId <= requestedAfter)
+      ) {
+        throw new DaykeeperWebTransportError({
+          code: "INVALID_RESPONSE",
+          message:
+            "The Daykeeper customer API returned invalid message cursors",
+          retryable: true,
+        });
+      }
+      this.#lastFetchedMessageId = fetchedId;
+      after = fetchedId;
+      const mapped = messages
+        .map(toThreadMessage)
+        .filter((entry): entry is ThreadMessage => entry !== null);
+      const known = new Set<number | null>(
+        this.state.thread.map((entry) => entry.id),
+      );
+      const fresh = mapped.filter((entry) => !known.has(entry.id));
+      const thread = mergeServerMessages(this.state.thread, fresh);
+      this.#set({
+        thread,
+        threadLoaded: true,
+        historyCursorBefore:
+          requestedAfter === undefined
+            ? minimumMessageId(messages)
+            : this.state.historyCursorBefore,
+        // A no-cursor page can arrive after an empty conversation was first
+        // read; those messages make older-history loading available again.
+        historyExhausted:
+          requestedAfter === undefined ? false : this.state.historyExhausted,
+      });
+      const incoming = fresh.filter(
+        (entry) => entry.author === "agent" || entry.author === "human",
+      );
+      if (incoming.length) {
+        this.#touch();
+        if (!initial || !firstPage)
+          this.#emit({ type: "incoming", messages: incoming });
+      }
+      firstPage = false;
     }
-    await this.#markSeen(client, id);
+
+    // The provider's seen endpoint marks the whole conversation. Do not call
+    // it while there are still forward pages; doing so would mark records the
+    // visitor has not loaded as seen. Also defer uncertain-send failure checks
+    // until a complete catch-up, so a later page can still reconcile a send.
+    if (exhaustedForwardPages) {
+      this.#set({ thread: settleUnconfirmed(this.state.thread) });
+      await this.#markSeen(client, id);
+    }
   }
 
   /** POST …/seen once agent/human replies are on screen. */
