@@ -172,6 +172,7 @@ function setup(options: { stored?: boolean; hasConversation?: boolean } = {}) {
     listMessages: (_id: number, opts: { after?: number; before?: number }) => {
       if (opts?.before !== undefined) {
         return {
+          pagination: "cursor",
           messages: serverMessages
             .filter((m) => m.id < opts.before!)
             .slice(-20),
@@ -179,12 +180,16 @@ function setup(options: { stored?: boolean; hasConversation?: boolean } = {}) {
       }
       if (opts?.after !== undefined) {
         return {
+          pagination: "cursor",
           messages: serverMessages
             .filter((m) => m.id > opts.after!)
             .slice(0, 100),
         };
       }
-      return { messages: serverMessages.slice(-20) };
+      return {
+        pagination: "cursor",
+        messages: serverMessages.slice(-20),
+      };
     },
     sendMessage: (id: number, content: string) => {
       const sent = message(1000 + serverMessages.length, "customer", content);

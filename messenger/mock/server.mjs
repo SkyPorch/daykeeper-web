@@ -357,6 +357,15 @@ export async function startMock({
     const conversation = owned(sub, params.id);
     if (!conversation)
       return send(response, 404, { error: "unknown_conversation" }, headers);
+    const paginationValues = url.searchParams.getAll("pagination");
+    const cursorMode =
+      paginationValues.length === 1 && paginationValues[0] === "cursor";
+    if (
+      paginationValues.length > 1 ||
+      (paginationValues.length === 1 && !cursorMode)
+    ) {
+      return send(response, 400, { error: "invalid_pagination_mode" }, headers);
+    }
     const cursor = (name) => {
       const values = url.searchParams.getAll(name);
       if (!values.length) return undefined;
@@ -375,7 +384,8 @@ export async function startMock({
     if (
       after === null ||
       before === null ||
-      (after !== undefined && before !== undefined)
+      (after !== undefined && before !== undefined) ||
+      (before !== undefined && !cursorMode)
     ) {
       return send(response, 400, { error: "invalid_message_cursor" }, headers);
     }
@@ -383,14 +393,15 @@ export async function startMock({
     if (before !== undefined)
       page = page.filter((message) => message.id < before).slice(-20);
     else if (after !== undefined)
-      page = page.filter((message) => message.id > after).slice(0, 20);
+      page = page
+        .filter((message) => message.id > after)
+        .slice(0, cursorMode ? 20 : 100);
     else page = page.slice(-20);
+    const messages = page.map(wireMessage);
     send(
       response,
       200,
-      {
-        messages: page.map(wireMessage),
-      },
+      cursorMode ? { pagination: "cursor", messages } : { messages },
       headers,
     );
   }

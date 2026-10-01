@@ -151,26 +151,44 @@ test.describe("open, send, receive", () => {
       (r) =>
         r.method === "GET" &&
         /\/messages(?:\?|$)/.test(r.path) &&
+        new URLSearchParams(r.path.split("?")[1] ?? "").get("pagination") ===
+          "cursor" &&
         !/[?&](?:after|before)=\d+/.test(r.path),
     );
     expect(initialRead.length).toBeGreaterThan(0);
     const nextPoll = waitForRequest(
       mock,
-      (r) => r.method === "GET" && /messages\?after=\d+$/.test(r.path),
+      (r) => {
+        const query = new URLSearchParams(r.path.split("?")[1] ?? "");
+        return (
+          r.method === "GET" &&
+          /\/messages\?/.test(r.path) &&
+          query.get("pagination") === "cursor" &&
+          query.has("after")
+        );
+      },
       15_000,
     );
     const polls = await nextPoll;
-    expect(polls[0]!.path).toMatch(/after=5001$/);
+    expect(new URLSearchParams(polls[0]!.path.split("?")[1]).get("after")).toBe(
+      "5001",
+    );
+    expect(
+      new URLSearchParams(polls[0]!.path.split("?")[1]).get("pagination"),
+    ).toBe("cursor");
     const requests = (await mock.state()).requests;
     const initialIndex = requests.findIndex(
       (r) =>
         r.method === "GET" &&
         /\/messages(?:\?|$)/.test(r.path) &&
+        new URLSearchParams(r.path.split("?")[1] ?? "").get("pagination") ===
+          "cursor" &&
         !/[?&](?:after|before)=\d+/.test(r.path),
     );
-    const afterIndex = requests.findIndex((r) =>
-      /messages\?after=\d+$/.test(r.path),
-    );
+    const afterIndex = requests.findIndex((r) => {
+      const query = new URLSearchParams(r.path.split("?")[1] ?? "");
+      return /\/messages\?/.test(r.path) && query.has("after");
+    });
     expect(initialIndex).toBeGreaterThanOrEqual(0);
     expect(afterIndex).toBeGreaterThan(initialIndex);
   });

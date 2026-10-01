@@ -148,10 +148,11 @@ export class DaykeeperWebClient {
     if (options.before !== undefined) {
       params.set("before", String(positiveInteger(options.before, "before")));
     }
+    params.set("pagination", "cursor");
     const query = params.size ? `?${params}` : "";
-    return this.#request(`/v1/conversations/${id}/messages${query}`, {
+    return this.#request<unknown>(`/v1/conversations/${id}/messages${query}`, {
       signal: options.signal,
-    });
+    }).then(validateCursorMessageList);
   }
 
   sendMessage(
@@ -551,6 +552,25 @@ function utf8LengthExceeds(value: string, maximum: number): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validateCursorMessageList(payload: unknown): DaykeeperMessageList {
+  if (
+    !isRecord(payload) ||
+    payload.pagination !== "cursor" ||
+    !Array.isArray(payload.messages) ||
+    payload.messages.length > 20 ||
+    !payload.messages.every(
+      (message) =>
+        isRecord(message) &&
+        typeof message.id === "number" &&
+        Number.isSafeInteger(message.id) &&
+        message.id > 0,
+    )
+  ) {
+    throw invalidResponse();
+  }
+  return payload as unknown as DaykeeperMessageList;
 }
 
 function responseTooLarge(): DaykeeperWebTransportError {
