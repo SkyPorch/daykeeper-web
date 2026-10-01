@@ -27,10 +27,18 @@ export interface Strings {
   sent: string;
   notDelivered: string;
   maybeNotDelivered: string;
+  checkAgain: string;
+  conversationChoiceHint: (count: number) => string;
+  selectConversation: (index: number) => string;
+  useConversation: string;
   retry: string;
   charactersLeft: (count: number) => string;
   tooLong: (max: number) => string;
   newMessages: string;
+  loadOlderMessages: string;
+  loadingOlderMessages: string;
+  olderMessagesError: string;
+  attachmentMessage: (count: number) => string;
   newMessageFrom: (name: string, text: string) => string;
   poweredBy: string;
   loading: string;
@@ -73,11 +81,23 @@ export const en: Strings = {
   sent: "Sent",
   notDelivered: "Not delivered.",
   maybeNotDelivered: "We couldn't confirm this was sent.",
+  checkAgain: "Check again",
+  conversationChoiceHint: (count) =>
+    count === 1
+      ? "A conversation appeared while reconnecting. Choose whether to continue there."
+      : "Conversations appeared while reconnecting. Choose where to continue.",
+  selectConversation: (index) => `Continue in conversation ${index}`,
+  useConversation: "Continue",
   retry: "Retry",
   charactersLeft: (count) =>
     count === 1 ? "1 character left" : `${count} characters left`,
   tooLong: (max) => `Messages can be up to ${max.toLocaleString()} characters.`,
   newMessages: "New messages",
+  loadOlderMessages: "Load older messages",
+  loadingOlderMessages: "Loading older messages…",
+  olderMessagesError: "Couldn't load older messages. Try again.",
+  attachmentMessage: (count) =>
+    count === 1 ? "Attachment" : `${count} attachments`,
   newMessageFrom: (name, text) => `${name}: ${text}`,
   poweredBy: "Powered by Daykeeper",
   loading: "Loading",

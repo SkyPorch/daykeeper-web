@@ -144,12 +144,53 @@ test.describe("open, send, receive", () => {
     await m.textarea.fill("hello");
     await m.textarea.press("Enter");
     await expect(m.messages.locator(".msg")).toHaveCount(1);
-    const polls = await waitForRequest(
+    // A new thread has no active server conversation until this send creates
+    // it, so this first list call establishes the fetched cursor.
+    const initialRead = await waitForRequest(
       mock,
-      (r) => r.method === "GET" && /messages\?after=\d+$/.test(r.path),
-      8_000,
+      (r) =>
+        r.method === "GET" &&
+        /\/messages(?:\?|$)/.test(r.path) &&
+        new URLSearchParams(r.path.split("?")[1] ?? "").get("pagination") ===
+          "cursor" &&
+        !/[?&](?:after|before)=\d+/.test(r.path),
     );
-    expect(polls[0]!.path).toMatch(/after=5001$/);
+    expect(initialRead.length).toBeGreaterThan(0);
+    const nextPoll = waitForRequest(
+      mock,
+      (r) => {
+        const query = new URLSearchParams(r.path.split("?")[1] ?? "");
+        return (
+          r.method === "GET" &&
+          /\/messages\?/.test(r.path) &&
+          query.get("pagination") === "cursor" &&
+          query.has("after")
+        );
+      },
+      15_000,
+    );
+    const polls = await nextPoll;
+    expect(new URLSearchParams(polls[0]!.path.split("?")[1]).get("after")).toBe(
+      "5001",
+    );
+    expect(
+      new URLSearchParams(polls[0]!.path.split("?")[1]).get("pagination"),
+    ).toBe("cursor");
+    const requests = (await mock.state()).requests;
+    const initialIndex = requests.findIndex(
+      (r) =>
+        r.method === "GET" &&
+        /\/messages(?:\?|$)/.test(r.path) &&
+        new URLSearchParams(r.path.split("?")[1] ?? "").get("pagination") ===
+          "cursor" &&
+        !/[?&](?:after|before)=\d+/.test(r.path),
+    );
+    const afterIndex = requests.findIndex((r) => {
+      const query = new URLSearchParams(r.path.split("?")[1] ?? "");
+      return /\/messages\?/.test(r.path) && query.has("after");
+    });
+    expect(initialIndex).toBeGreaterThanOrEqual(0);
+    expect(afterIndex).toBeGreaterThan(initialIndex);
   });
 
   test("showNewMessage opens a prefilled composer without sending", async ({
@@ -224,6 +265,39 @@ test.describe("open, send, receive", () => {
     await expect(m.messages.locator(".msg.failed")).toHaveCount(0);
     await expect(m.messages.locator(".msg .meta")).toContainText("You");
     expect((await mock.state()).conversations[0]!.messages).toHaveLength(1);
+  });
+
+  test("an uncertain create asks before sending into a newly appeared conversation", async ({
+    page,
+    mock,
+  }) => {
+    const m = messenger(page);
+    await page.goto(`${mock.siteUrl}/`);
+    await m.launcher.click();
+    await m.newConversation.click();
+    await page.route(`${mock.gatewayUrl}/v1/conversations`, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      // Let the gateway create the conversation but drop the browser response,
+      // reproducing the ambiguous outcome that must not be silently adopted.
+      await route.fetch();
+      await route.abort("failed");
+    });
+    await m.textarea.fill("keep this draft safe");
+    await m.textarea.press("Enter");
+    const pending = m.messages.locator(".msg.pending");
+    await expect(pending).toContainText("couldn't confirm this was sent");
+    const choose = m.messages.getByRole("button", {
+      name: "Continue in conversation 1",
+    });
+    await expect(choose).toBeVisible();
+    expect((await mock.state()).conversations[0]!.messages).toHaveLength(0);
+    await choose.click();
+    await expect(m.messages.locator(".msg.pending")).toHaveCount(0);
+    expect(
+      (await mock.state()).conversations[0]!.messages.map(
+        (entry) => entry.content,
+      ),
+    ).toEqual(["keep this draft safe"]);
   });
 });
 
@@ -428,6 +502,101 @@ test.describe("unread, storage, session", () => {
         mock.publishableKey,
       ),
     ).toBeNull();
+  });
+
+  test("shutdown with forget fences a late visitor-session response", async ({
+    page,
+    mock,
+  }) => {
+    let release!: () => void;
+    let markStarted!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const started = new Promise<void>((resolve) => (markStarted = resolve));
+    await page.route("**/v1/visitor-sessions", async (route) => {
+      const response = await route.fetch();
+      markStarted();
+      await gate;
+      await route.fulfill({ response });
+    });
+    const m = messenger(page);
+    await page.goto(`${mock.siteUrl}/`);
+    await m.launcher.click();
+    await started;
+    await page.evaluate(() =>
+      (window as unknown as { Daykeeper: (...a: unknown[]) => void }).Daykeeper(
+        "shutdown",
+        { forget: true },
+      ),
+    );
+    expect(
+      await page.evaluate(
+        (key) => localStorage.getItem(`dk:messenger:${key}`),
+        mock.publishableKey,
+      ),
+    ).toBeNull();
+    release();
+    await page.waitForTimeout(100);
+    expect(
+      await page.evaluate(
+        (key) => localStorage.getItem(`dk:messenger:${key}`),
+        mock.publishableKey,
+      ),
+    ).toBeNull();
+  });
+});
+
+test.describe("message history", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(openShadowRoots);
+  });
+
+  test("loads older pages and displays attachment-only replies safely", async ({
+    page,
+    mock,
+  }) => {
+    const seeded = await mock.seed({
+      conversations: [
+        {
+          messages: [
+            ...Array.from({ length: 24 }, (_, index) => ({
+              author: "agent" as const,
+              content: `History ${index + 1}`,
+            })),
+            {
+              author: "customer" as const,
+              content: "",
+              attachments: [
+                {
+                  id: 991,
+                  fileType: "image/png",
+                  dataUrl: "https://files.example.test/private.png",
+                  thumbUrl: "https://files.example.test/private-thumb.png",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    await storeVisitor(page, mock.publishableKey, seeded);
+    const m = messenger(page);
+    await page.goto(`${mock.siteUrl}/`);
+    await m.launcher.click();
+    await m.host.locator(".row").first().click();
+    await expect(m.messages.locator(".msg")).toHaveCount(20);
+    await expect(m.messages.locator(".msg .bubble").last()).toHaveText(
+      "Attachment",
+    );
+    await expect(m.messages.locator("img, a")).toHaveCount(0);
+    await m.host.getByRole("button", { name: "Load older messages" }).click();
+    await expect(m.messages.locator(".msg")).toHaveCount(25);
+    await expect(m.messages.locator(".msg .bubble").first()).toHaveText(
+      "History 1",
+    );
+    await m.host.getByRole("button", { name: "Load older messages" }).click();
+    await expect(
+      m.host.getByRole("button", { name: "Load older messages" }),
+    ).toBeHidden();
   });
 });
 
@@ -821,14 +990,25 @@ test.describe("isolation", () => {
     );
     await expect(m.launcher).toBeHidden();
     await page.getByRole("button", { name: "Ask a question" }).focus();
-    await page.evaluate(() =>
+    await page.evaluate(() => {
       (window as unknown as { Daykeeper: (c: string) => void }).Daykeeper(
         "show",
-      ),
-    );
-    await expect(m.panel).toBeVisible();
-    await page.keyboard.press("Escape");
+      );
+      // Escape in the same task targets the page control before the widget's
+      // scheduled focus transfer; the open panel must still be dismissible.
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Escape",
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+        }),
+      );
+    });
     await expect(m.panel).toBeHidden();
+    await expect(
+      page.getByRole("button", { name: "Ask a question" }),
+    ).toBeFocused();
   });
 
   test("the snippet queue works when commands run before the script loads", async ({

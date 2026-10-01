@@ -241,8 +241,73 @@ test("reset discards an in-flight exchange", async () => {
   const pending = session.ensure();
   session.reset();
   release();
-  await pending;
+  await assert.rejects(
+    pending,
+    (error: unknown) =>
+      error instanceof MessengerError && error.code === "unknown",
+  );
   assert.equal(session.grant, null);
+});
+
+test("a late first exchange cannot restore a visitor after reset and forget", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const values = new Map<string, string>();
+  const backing = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+    removeItem: (key: string) => values.delete(key),
+  };
+  const store = createVisitorStore(KEY, () => backing);
+  const session = new VisitorSession({
+    publishableKey: KEY,
+    gatewayUrl: GATEWAY,
+    store,
+    fetch: async () => {
+      await gate;
+      return Response.json(
+        grantBody({ id: V1, secret: S1 }, iso(1_800_000_300_000)),
+        { status: 201 },
+      );
+    },
+  });
+  const pending = session.ensure();
+  session.reset();
+  store.clear();
+  release();
+  await assert.rejects(
+    pending,
+    (error: unknown) =>
+      error instanceof MessengerError && error.code === "unknown",
+  );
+  assert.equal(store.read(), null);
+  assert.equal(values.size, 0);
+});
+
+test("a reset exchange cannot clear the newer shared in-flight exchange", async () => {
+  const releases: (() => void)[] = [];
+  const { calls, session } = harness(async () => {
+    await new Promise<void>((resolve) => releases.push(resolve));
+    return Response.json(
+      grantBody({ id: V1, secret: S1 }, iso(1_800_000_300_000)),
+      { status: 201 },
+    );
+  });
+  const first = session.ensure();
+  session.reset();
+  const second = session.ensure();
+  assert.equal(calls.length, 2);
+  releases[0]!();
+  await assert.rejects(
+    first,
+    (error: unknown) =>
+      error instanceof MessengerError && error.code === "unknown",
+  );
+  const shared = session.ensure();
+  assert.equal(calls.length, 2);
+  releases[1]!();
+  await Promise.all([second, shared]);
+  assert.equal(calls.length, 2);
 });
 
 test("parseExpiry accepts ISO, seconds, milliseconds and the JWT exp", () => {

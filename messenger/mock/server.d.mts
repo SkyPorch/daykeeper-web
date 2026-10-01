@@ -8,6 +8,12 @@ export interface MockMessage {
   createdAt: number;
   author: "customer" | "agent" | "human" | "system";
   sender: { name: string | null; avatarUrl: string | null } | null;
+  attachments: {
+    id: number;
+    fileType: string | null;
+    dataUrl: string | null;
+    thumbUrl: string | null;
+  }[];
 }
 
 export interface MockState {
@@ -30,6 +36,7 @@ export interface SeedThread {
     content: string;
     ageSeconds?: number;
     senderName?: string;
+    attachments?: MockMessage["attachments"];
   }[];
 }
 

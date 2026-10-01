@@ -26,6 +26,11 @@ changes because of the management contract bump. See `COMPATIBILITY.md`.
 
 ### Changes
 
+- Send `pagination=cursor` on every message-history request, require the
+  `pagination: "cursor"` response marker, and validate safe cursor IDs and the
+  bounded 20-message page shape. The customer gateway must be upgraded before
+  applications use this SDK. Existing v1 clients that omit the query parameter
+  retain their legacy response and `after` behavior.
 - Add a provenance-producing release workflow, a documented release sequence in
   `RELEASING.md`, a version/contract table in `COMPATIBILITY.md`, and
   `docs/quickstart.md`. The package stays `private: true`; removing that block

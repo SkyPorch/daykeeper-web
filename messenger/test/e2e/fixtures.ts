@@ -35,7 +35,7 @@ export function messenger(page: Page) {
     back: host.locator(".topbar .icon-button").first(),
     close: host.getByRole("button", { name: "Close", exact: true }),
     messages: host.locator(".messages"),
-    live: host.locator("[aria-live]"),
+    live: host.locator(".sr[aria-live]"),
   };
 }
 

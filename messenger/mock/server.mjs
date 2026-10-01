@@ -128,14 +128,18 @@ export async function startMock({
     messageType: message.message_type,
     createdAt: message.created_at,
     sender: message.sender,
-    attachments: [],
+    attachments: message.attachments ?? [],
     author: message.author,
   });
-  const addMessage = (conversation, { author, content, senderName }) => {
+  const addMessage = (
+    conversation,
+    { author, content, senderName, attachments },
+  ) => {
     const message = {
       id: ++messageSeq,
       conversation_id: conversation.id,
       content,
+      attachments: Array.isArray(attachments) ? attachments : [],
       message_type: author === "customer" ? 0 : 1,
       created_at: now(),
       sender:
@@ -353,15 +357,51 @@ export async function startMock({
     const conversation = owned(sub, params.id);
     if (!conversation)
       return send(response, 404, { error: "unknown_conversation" }, headers);
-    const after = Number(url.searchParams.get("after")) || 0;
+    const paginationValues = url.searchParams.getAll("pagination");
+    const cursorMode =
+      paginationValues.length === 1 && paginationValues[0] === "cursor";
+    if (
+      paginationValues.length > 1 ||
+      (paginationValues.length === 1 && !cursorMode)
+    ) {
+      return send(response, 400, { error: "invalid_pagination_mode" }, headers);
+    }
+    const cursor = (name) => {
+      const values = url.searchParams.getAll(name);
+      if (!values.length) return undefined;
+      if (
+        values.length !== 1 ||
+        !/^\d+$/.test(values[0]) ||
+        !Number.isSafeInteger(Number(values[0])) ||
+        Number(values[0]) <= 0
+      ) {
+        return null;
+      }
+      return Number(values[0]);
+    };
+    const after = cursor("after");
+    const before = cursor("before");
+    if (
+      after === null ||
+      before === null ||
+      (after !== undefined && before !== undefined) ||
+      (before !== undefined && !cursorMode)
+    ) {
+      return send(response, 400, { error: "invalid_message_cursor" }, headers);
+    }
+    let page = conversation.messages;
+    if (before !== undefined)
+      page = page.filter((message) => message.id < before).slice(-20);
+    else if (after !== undefined)
+      page = page
+        .filter((message) => message.id > after)
+        .slice(0, cursorMode ? 20 : 100);
+    else page = page.slice(-20);
+    const messages = page.map(wireMessage);
     send(
       response,
       200,
-      {
-        messages: conversation.messages
-          .filter((message) => message.id > after)
-          .map(wireMessage),
-      },
+      cursorMode ? { pagination: "cursor", messages } : { messages },
       headers,
     );
   }

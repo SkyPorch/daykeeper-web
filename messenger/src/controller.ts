@@ -41,9 +41,14 @@ export interface ThreadMessage {
   author: Author;
   senderName: string | null;
   content: string;
+  attachmentCount?: number;
   createdAt: number | null;
   status: SendStatus;
   failure?: SendFailure;
+  /** First conversation creation had an unknown outcome; reconcile before any retry. */
+  reconcile?: boolean;
+  /** New conversations found after an uncertain create; user chooses explicitly. */
+  reconcileCandidates?: ConversationSummary[];
   /** Polls that have not yet shown an unconfirmed send on the server. */
   checks?: number;
 }
@@ -73,6 +78,10 @@ export interface MessengerState {
   activeId: number | null;
   thread: ThreadMessage[];
   threadLoaded: boolean;
+  historyExhausted: boolean;
+  historyCursorBefore: number | null;
+  historyLoading: boolean;
+  historyError: boolean;
   unread: number;
   /** Text to prefill once (showNewMessage); the view clears it. */
   prefill: string | null;
@@ -104,6 +113,7 @@ export interface ControllerEnvironment {
 }
 
 export const MAX_MESSAGE_LENGTH = 4_000;
+const MAX_FORWARD_PAGES_PER_TICK = 10;
 export const POLL = {
   unreadVisible: 30_000,
   unreadHidden: 120_000,
@@ -140,6 +150,10 @@ export class MessengerController {
     activeId: null,
     thread: [],
     threadLoaded: false,
+    historyExhausted: false,
+    historyCursorBefore: null,
+    historyLoading: false,
+    historyError: false,
     unread: 0,
     prefill: null,
   };
@@ -159,6 +173,9 @@ export class MessengerController {
   #sessionError: MessengerError | null = null;
   #stopped = false;
   #threadToken = 0;
+  /** Highest server id returned by listMessages for the current open thread. */
+  #lastFetchedMessageId: number | null = null;
+  #orphanedConversation: DaykeeperConversation | null = null;
   /**
    * The gateway reflects CORS only after it verified the token, so an
    * expired or rejected token reaches us as an opaque network failure, not a
@@ -166,6 +183,9 @@ export class MessengerController {
    * first (once per failure streak).
    */
   #suspectToken = false;
+  #creatingConversation: Promise<DaykeeperConversation> | null = null;
+  #uncertainCreateIds: Set<number> | null = null;
+  #uncertainCreateChecked = false;
 
   constructor(env: ControllerEnvironment) {
     this.#env = {
@@ -194,6 +214,7 @@ export class MessengerController {
 
   shutdown(): void {
     this.#stopped = true;
+    this.#threadToken += 1;
     this.#clearTimer();
     this.#listeners.clear();
     this.#env.session.reset();
@@ -221,35 +242,50 @@ export class MessengerController {
 
   showHome(): void {
     this.#threadToken += 1;
+    this.#lastFetchedMessageId = null;
     this.#set({
       view: "home",
       activeId: null,
       thread: [],
       threadLoaded: false,
+      historyExhausted: false,
+      historyCursorBefore: null,
+      historyLoading: false,
+      historyError: false,
     });
     void this.#refreshOpen();
   }
 
   openConversation(id: number): void {
     this.#threadToken += 1;
+    this.#lastFetchedMessageId = null;
     this.#touch();
     this.#set({
       view: "thread",
       activeId: id,
       thread: [],
       threadLoaded: false,
+      historyExhausted: false,
+      historyCursorBefore: null,
+      historyLoading: false,
+      historyError: false,
     });
     void this.#refreshOpen();
   }
 
   newConversation(prefill: string | null = null): void {
     this.#threadToken += 1;
+    this.#lastFetchedMessageId = null;
     this.#touch();
     this.#set({
       view: "thread",
       activeId: null,
       thread: [],
       threadLoaded: true,
+      historyExhausted: true,
+      historyCursorBefore: null,
+      historyLoading: false,
+      historyError: false,
       prefill,
     });
     if (!this.state.open) this.open();
@@ -267,6 +303,53 @@ export class MessengerController {
     const wasIdle = this.#isIdle();
     this.#touch();
     if (wasIdle) this.#reschedule();
+  }
+
+  async loadOlderMessages(): Promise<void> {
+    const id = this.state.activeId;
+    if (
+      id === null ||
+      !this.state.threadLoaded ||
+      this.state.historyExhausted ||
+      this.state.historyLoading
+    )
+      return;
+    const before =
+      this.state.historyCursorBefore ?? firstServerId(this.state.thread);
+    if (before === null) {
+      this.#set({ historyExhausted: true, historyError: false });
+      return;
+    }
+    const threadToken = this.#threadToken;
+    this.#set({ historyLoading: true, historyError: false });
+    try {
+      const client = await this.#ensureConnected();
+      if (!client) throw new MessengerError(this.state.error ?? "unknown");
+      const { messages } = await client.listMessages(id, { before });
+      if (threadToken !== this.#threadToken) return;
+      const older = messages
+        .map(toThreadMessage)
+        .filter((entry): entry is ThreadMessage => entry !== null);
+      const known = new Set(this.state.thread.map((entry) => entry.id));
+      this.#set({
+        thread: mergeServerMessages(
+          this.state.thread,
+          older.filter((entry) => !known.has(entry.id)),
+          false,
+        ),
+        // Cursor/exhaustion follows raw provider-visible records, not only
+        // records we can render. Empty text-only historical events are still
+        // a real page and must advance the `before` cursor.
+        historyCursorBefore: minimumMessageId(messages),
+        historyExhausted: messages.length === 0,
+        historyLoading: false,
+        historyError: false,
+      });
+    } catch {
+      if (threadToken === this.#threadToken) {
+        this.#set({ historyLoading: false, historyError: true });
+      }
+    }
   }
 
   visibilityChanged(): void {
@@ -296,6 +379,7 @@ export class MessengerController {
       author: "customer",
       senderName: null,
       content,
+      attachmentCount: 0,
       createdAt: this.#env.now(),
       status: "sending",
     };
@@ -306,25 +390,62 @@ export class MessengerController {
 
   async retrySend(key: string): Promise<void> {
     const message = this.state.thread.find((entry) => entry.key === key);
-    if (!message || message.status !== "failed") return;
-    this.#patchMessage(key, { status: "sending", failure: undefined });
+    if (
+      !message ||
+      (message.status !== "failed" &&
+        !(message.status === "unconfirmed" && message.reconcile))
+    )
+      return;
+    this.#patchMessage(key, {
+      status: "sending",
+      failure: undefined,
+      reconcile: message.reconcile,
+    });
     await this.#deliver(key);
+  }
+
+  /** Let the visitor choose a newly appeared conversation before retrying. */
+  async selectReconciledConversation(key: string, id: number): Promise<void> {
+    const pending = this.state.thread.find((entry) => entry.key === key);
+    const candidate = pending?.reconcileCandidates?.find(
+      (entry) => entry.id === id,
+    );
+    if (!pending || !candidate || pending.status !== "unconfirmed") return;
+    this.#uncertainCreateIds = null;
+    this.#uncertainCreateChecked = false;
+    this.#set({
+      activeId: id,
+      conversations: upsertConversation(this.state.conversations, candidate),
+    });
+    this.#patchMessage(key, {
+      status: "failed",
+      failure: "unknown",
+      reconcile: false,
+      reconcileCandidates: undefined,
+    });
+    await this.retrySend(key);
   }
 
   // ---- delivery --------------------------------------------------------
 
   async #deliver(key: string): Promise<void> {
     const threadToken = this.#threadToken;
+    const isCurrent = () => !this.#stopped && threadToken === this.#threadToken;
     const current = () => this.state.thread.find((entry) => entry.key === key);
     try {
       const client = await this.#ensureConnected();
+      if (!isCurrent()) return;
       if (!client) throw new MessengerError(this.state.error ?? "unknown");
       await this.#refreshIfSuspect();
+      if (!isCurrent()) return;
       let conversationId = this.state.activeId;
       if (conversationId === null) {
-        const { conversation } = await this.#write(() =>
-          client.createConversation(),
+        const conversation = await this.#getOrCreateConversation(
+          client,
+          isCurrent,
+          key,
         );
+        if (!isCurrent()) return;
         conversationId = conversation.id;
         this.#markHasConversation();
         if (threadToken === this.#threadToken) {
@@ -357,11 +478,18 @@ export class MessengerController {
       const error = this.#mapError(raw);
       if (error.code === "network_error") this.#suspectToken = true;
       if (threadToken !== this.#threadToken) return;
-      if (error.outcomeUnknown && this.state.activeId !== null) {
-        // The server may have accepted it. Reconcile against the thread on
-        // the next poll instead of offering a resend that could duplicate.
-        this.#patchMessage(key, { status: "unconfirmed", failure: "unknown" });
-        this.#schedule(POLL.threadActive);
+      if (error.outcomeUnknown) {
+        // Both a message write and first-conversation creation can have
+        // succeeded when their response is lost. Reconcile before offering a
+        // retry so a second conversation or message is never created blindly.
+        this.#patchMessage(key, {
+          status: "unconfirmed",
+          failure: "unknown",
+          reconcile: this.#uncertainCreateIds !== null,
+        });
+        this.#schedule(
+          this.state.activeId === null ? POLL.homeVisible : POLL.threadActive,
+        );
         return;
       }
       if (isTerminal(error.code)) this.#fail(error);
@@ -375,6 +503,93 @@ export class MessengerController {
               : "failed",
       });
     }
+  }
+
+  async #getOrCreateConversation(
+    client: Client,
+    isCurrent: () => boolean,
+    messageKey: string,
+  ): Promise<DaykeeperConversation> {
+    if (!isCurrent()) throw new MessengerError("unknown");
+    if (this.#orphanedConversation) {
+      const conversation = this.#orphanedConversation;
+      this.#orphanedConversation = null;
+      return conversation;
+    }
+    if (this.#uncertainCreateIds) {
+      const alreadyChecked = this.#uncertainCreateChecked;
+      await this.#reconcileConversation(client, messageKey, isCurrent);
+      if (!isCurrent()) throw new MessengerError("unknown");
+      if (!alreadyChecked || !this.#uncertainCreateChecked) {
+        throw new MessengerError("network_error", {
+          retryable: true,
+          outcomeUnknown: true,
+        });
+      }
+      // A completed contact-conversation read has now found no result twice
+      // (the immediate reconciliation and this explicit retry). Only then let
+      // the customer's manual retry create again instead of wedging forever.
+      this.#uncertainCreateIds = null;
+      this.#uncertainCreateChecked = false;
+    }
+    if (!this.#creatingConversation) {
+      this.#creatingConversation = (async () => {
+        const { conversations: before } = await client.listConversations();
+        if (!isCurrent()) throw new MessengerError("unknown");
+        const beforeIds = new Set(before.map((entry) => entry.id));
+        try {
+          const { conversation } = await this.#write(() =>
+            client.createConversation(),
+          );
+          if (!isCurrent()) {
+            // The user navigated away while creation was in flight. Keep the
+            // known successful result so a later draft does not create a
+            // second conversation for the same visitor.
+            this.#orphanedConversation = conversation;
+            throw new MessengerError("unknown");
+          }
+          this.#uncertainCreateIds = null;
+          this.#uncertainCreateChecked = false;
+          return conversation;
+        } catch (raw) {
+          const error = this.#mapError(raw);
+          if (!error.outcomeUnknown) throw error;
+          this.#uncertainCreateIds = beforeIds;
+          this.#uncertainCreateChecked = false;
+          if (!isCurrent()) throw error;
+          await this.#reconcileConversation(client, messageKey, isCurrent);
+          if (!isCurrent()) throw error;
+          throw error;
+        }
+      })().finally(() => {
+        this.#creatingConversation = null;
+      });
+    }
+    return this.#creatingConversation;
+  }
+
+  async #reconcileConversation(
+    client: Client,
+    messageKey: string,
+    isCurrent: () => boolean = () => !this.#stopped,
+  ): Promise<void> {
+    const beforeIds = this.#uncertainCreateIds;
+    if (!beforeIds) return;
+    const { conversations } = await client.listConversations();
+    if (!isCurrent()) return;
+    const candidates = conversations.filter(
+      (entry) => !beforeIds.has(entry.id),
+    );
+    if (candidates.length === 0) {
+      this.#uncertainCreateChecked = true;
+      this.#patchMessage(messageKey, { reconcileCandidates: undefined });
+      return;
+    }
+    this.#uncertainCreateChecked = false;
+    this.#patchMessage(messageKey, {
+      reconcileCandidates: candidates.map(summarize),
+    });
+    this.#markHasConversation();
   }
 
   async #refreshIfSuspect(): Promise<void> {
@@ -503,6 +718,7 @@ export class MessengerController {
 
   async #pollConversations(client: Client): Promise<void> {
     const { conversations } = await client.listConversations();
+    if (this.#stopped) return;
     const list = conversations
       .map(summarize)
       .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
@@ -514,28 +730,88 @@ export class MessengerController {
   async #pollThread(client: Client, id: number): Promise<void> {
     const threadToken = this.#threadToken;
     const initial = !this.state.threadLoaded;
-    const after = initial ? undefined : lastServerId(this.state.thread);
-    const { messages } = await client.listMessages(id, after ? { after } : {});
-    if (threadToken !== this.#threadToken) return;
-    const mapped = messages
-      .map(toThreadMessage)
-      .filter((entry): entry is ThreadMessage => entry !== null);
-    const known = new Set<number | null>(
-      this.state.thread.map((entry) => entry.id),
-    );
-    const fresh = mapped.filter((entry) => !known.has(entry.id));
-    const thread = settleUnconfirmed(
-      mergeServerMessages(this.state.thread, fresh),
-    );
-    this.#set({ thread, threadLoaded: true });
-    const incoming = fresh.filter(
-      (entry) => entry.author === "agent" || entry.author === "human",
-    );
-    if (incoming.length) {
-      this.#touch();
-      if (!initial) this.#emit({ type: "incoming", messages: incoming });
+    // Customer send responses can have an id above messages that arrived
+    // while the thread was open. Advance only from listMessages responses so
+    // a local send can never jump over unseen incoming replies.
+    let after = initial ? undefined : (this.#lastFetchedMessageId ?? undefined);
+    let firstPage = true;
+    let exhaustedForwardPages = false;
+    for (
+      let pageNumber = 0;
+      pageNumber < MAX_FORWARD_PAGES_PER_TICK;
+      pageNumber++
+    ) {
+      const requestedAfter = after;
+      const { messages } = await client.listMessages(
+        id,
+        requestedAfter === undefined ? {} : { after: requestedAfter },
+      );
+      if (threadToken !== this.#threadToken) return;
+      if (messages.length === 0) {
+        if (requestedAfter === undefined) {
+          this.#set({
+            threadLoaded: true,
+            historyCursorBefore: null,
+            historyExhausted: true,
+          });
+        }
+        exhaustedForwardPages = true;
+        break;
+      }
+
+      const fetchedId = maximumMessageId(messages);
+      if (
+        fetchedId === null ||
+        (requestedAfter !== undefined && fetchedId <= requestedAfter)
+      ) {
+        throw new DaykeeperWebTransportError({
+          code: "INVALID_RESPONSE",
+          message:
+            "The Daykeeper customer API returned invalid message cursors",
+          retryable: true,
+        });
+      }
+      this.#lastFetchedMessageId = fetchedId;
+      after = fetchedId;
+      const mapped = messages
+        .map(toThreadMessage)
+        .filter((entry): entry is ThreadMessage => entry !== null);
+      const known = new Set<number | null>(
+        this.state.thread.map((entry) => entry.id),
+      );
+      const fresh = mapped.filter((entry) => !known.has(entry.id));
+      const thread = mergeServerMessages(this.state.thread, fresh);
+      this.#set({
+        thread,
+        threadLoaded: true,
+        historyCursorBefore:
+          requestedAfter === undefined
+            ? minimumMessageId(messages)
+            : this.state.historyCursorBefore,
+        // A no-cursor page can arrive after an empty conversation was first
+        // read; those messages make older-history loading available again.
+        historyExhausted:
+          requestedAfter === undefined ? false : this.state.historyExhausted,
+      });
+      const incoming = fresh.filter(
+        (entry) => entry.author === "agent" || entry.author === "human",
+      );
+      if (incoming.length) {
+        this.#touch();
+        if (!initial || !firstPage)
+          this.#emit({ type: "incoming", messages: incoming });
+      }
+      firstPage = false;
     }
-    await this.#markSeen(client, id);
+
+    // The provider's seen endpoint marks the whole conversation. Do not call
+    // it while there are still forward pages; doing so would mark records the
+    // visitor has not loaded as seen. Also defer uncertain-send failure checks
+    // until a complete catch-up, so a later page can still reconcile a send.
+    if (exhaustedForwardPages) {
+      this.#set({ thread: settleUnconfirmed(this.state.thread) });
+      await this.#markSeen(client, id);
+    }
   }
 
   /** POST …/seen once agent/human replies are on screen. */
@@ -595,7 +871,10 @@ export class MessengerController {
     if (view === "home") {
       return Math.max(backoff, visible ? POLL.homeVisible : POLL.homeHidden);
     }
-    if (activeId === null) return -1;
+    if (activeId === null) {
+      if (!this.#uncertainCreateIds) return -1;
+      return visible ? POLL.homeVisible : POLL.homeHidden;
+    }
     if (!visible && !hasUnconfirmed) return POLL.threadHidden;
     const base = this.#isIdle() ? POLL.threadIdle : POLL.threadActive;
     return Math.max(backoff, base);
@@ -682,7 +961,10 @@ export function toThreadMessage(
   if (!message || !Number.isSafeInteger(message.id) || message.id < 1)
     return null;
   const content = typeof message.content === "string" ? message.content : "";
-  if (!content.trim()) return null;
+  const attachmentCount = Array.isArray(message.attachments)
+    ? message.attachments.length
+    : 0;
+  if (!content.trim() && attachmentCount === 0) return null;
   return {
     key: `m:${message.id}`,
     id: message.id,
@@ -692,9 +974,29 @@ export function toThreadMessage(
         ? message.sender.name.trim().slice(0, 80)
         : null,
     content,
+    attachmentCount,
     createdAt: toMillis(message.createdAt),
     status: "sent",
   };
+}
+
+function firstServerId(thread: ThreadMessage[]): number | null {
+  const ids = thread
+    .map((entry) => entry.id)
+    .filter(
+      (id): id is number => id !== null && Number.isSafeInteger(id) && id > 0,
+    );
+  return ids.length ? Math.min(...ids) : null;
+}
+
+function minimumMessageId(messages: DaykeeperMessage[]): number | null {
+  let min = Number.POSITIVE_INFINITY;
+  for (const message of messages) {
+    if (Number.isSafeInteger(message.id) && message.id > 0) {
+      min = Math.min(min, message.id);
+    }
+  }
+  return Number.isFinite(min) ? min : null;
 }
 
 export function summarize(
@@ -733,11 +1035,12 @@ export function settleUnconfirmed(thread: ThreadMessage[]): ThreadMessage[] {
   });
 }
 
-function lastServerId(thread: ThreadMessage[]): number | undefined {
+function maximumMessageId(messages: DaykeeperMessage[]): number | null {
   let max = 0;
-  for (const entry of thread)
-    if (entry.id !== null && entry.id > max) max = entry.id;
-  return max || undefined;
+  for (const message of messages) {
+    if (Number.isSafeInteger(message.id) && message.id > max) max = message.id;
+  }
+  return max || null;
 }
 
 /**
@@ -748,6 +1051,7 @@ function lastServerId(thread: ThreadMessage[]): number | undefined {
 export function mergeServerMessages(
   thread: ThreadMessage[],
   fresh: ThreadMessage[],
+  settleUnconfirmed = true,
 ): ThreadMessage[] {
   const byId = new Map<number, ThreadMessage>();
   const local: ThreadMessage[] = [];
@@ -757,12 +1061,14 @@ export function mergeServerMessages(
   }
   for (const entry of fresh) {
     if (entry.id === null) continue;
-    const match = local.findIndex(
-      (pending) =>
-        pending.status === "unconfirmed" &&
-        entry.author === "customer" &&
-        pending.content === entry.content.trim(),
-    );
+    const match = settleUnconfirmed
+      ? local.findIndex(
+          (pending) =>
+            pending.status === "unconfirmed" &&
+            entry.author === "customer" &&
+            pending.content === entry.content.trim(),
+        )
+      : -1;
     if (match >= 0) local.splice(match, 1);
     byId.set(entry.id, entry);
   }

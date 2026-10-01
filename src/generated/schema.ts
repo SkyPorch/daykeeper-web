@@ -94,7 +94,28 @@ export interface paths {
         };
         /**
          * List visible messages in a customer conversation
-         * @description Private agent notes and activity records are never returned.
+         * @description Requests without `pagination=cursor` retain the legacy v1 response and
+         *     `after` behavior. Cursor pagination is an additive opt-in. Set
+         *     `pagination=cursor` on every initial, `before`, and `after` request to
+         *     receive the marked cursor response. Private agent notes and activity
+         *     records are never returned. Cursor results are in ascending message
+         *     identifier order. With no cursor, the cursor profile returns the latest
+         *     20 customer-visible messages. `before` returns up to 20 customer-visible
+         *     messages older than that identifier; `after` returns up to 20 newer
+         *     messages. `before` and `after` cannot be combined. Cursor identifiers
+         *     and response message IDs are positive JavaScript safe integers. If a
+         *     message ID is outside that range, cursor mode returns HTTP 502 with
+         *     `message_id_out_of_range`.
+         *
+         *     Each cursor response's normalized JSON envelope, including its
+         *     `pagination` marker, is capped at 786432 UTF-8 bytes, so a page can
+         *     contain fewer than 20 records. `after` pages are the oldest contiguous
+         *     prefix; continue from the last returned id until an empty page. Initial
+         *     and `before` pages are the newest contiguous suffix; continue before the
+         *     oldest returned id until an empty page. A single message that cannot
+         *     fit returns HTTP 413 with `message_too_large`. Invalid cursors,
+         *     `before` without cursor mode, and combined cursors return HTTP 400.
+         *     A short non-empty cursor page does not prove that history is exhausted.
          */
         get: operations["listCustomerMessages"];
         put?: never;
@@ -229,6 +250,19 @@ export interface components {
             sender: components["schemas"]["MessageSender"] | null;
             attachments: components["schemas"]["Attachment"][];
         };
+        CursorMessage: {
+            id: number;
+            conversationId: number;
+            content: string | null;
+            contentType: string;
+            contentAttributes: {
+                [key: string]: unknown;
+            };
+            messageType: number;
+            createdAt: number | string | null;
+            sender: components["schemas"]["MessageSender"] | null;
+            attachments: components["schemas"]["Attachment"][];
+        };
         MessageSender: {
             name: string | null;
             /** Format: uri */
@@ -266,6 +300,11 @@ export interface components {
         };
         MessageList: {
             messages: components["schemas"]["Message"][];
+        };
+        CursorMessageList: {
+            /** @constant */
+            pagination: "cursor";
+            messages: components["schemas"]["CursorMessage"][];
         };
         MessageResult: {
             message: components["schemas"]["Message"];
@@ -480,8 +519,24 @@ export interface operations {
     listCustomerMessages: {
         parameters: {
             query?: {
-                /** @description Return messages with a larger monotonic identifier. */
+                /**
+                 * @description Legacy requests retain their existing behavior, which returns at
+                 *     most the provider's 100-record limit. In cursor mode, return up to
+                 *     20 messages with a larger monotonic identifier. Cursor values must
+                 *     be positive JavaScript safe integers.
+                 */
                 after?: number;
+                /**
+                 * @description Requires `pagination=cursor`. Return up to 20 messages with a
+                 *     smaller monotonic identifier. Cursor values must be positive
+                 *     JavaScript safe integers.
+                 */
+                before?: number;
+                /**
+                 * @description Set to `cursor` to opt into bounded, cursor-marked pages. Omit to
+                 *     preserve the legacy v1 response and after behavior.
+                 */
+                pagination?: "cursor";
             };
             header?: never;
             path: {
@@ -497,10 +552,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MessageList"];
+                    "application/json": components["schemas"]["MessageList"] | components["schemas"]["CursorMessageList"];
                 };
             };
+            400: components["responses"]["Error"];
             401: components["responses"]["Error"];
+            /** @description One normalized message exceeds the cursor page byte budget. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerError"];
+                };
+            };
+            /** @description A provider message identifier cannot be represented safely in cursor mode. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerError"];
+                };
+            };
             default: components["responses"]["Error"];
         };
     };

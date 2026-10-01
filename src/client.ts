@@ -132,16 +132,27 @@ export class DaykeeperWebClient {
 
   listMessages(
     conversationId: number,
-    options: DaykeeperWebRequestOptions & { after?: number } = {},
+    options: DaykeeperWebRequestOptions & {
+      after?: number;
+      before?: number;
+    } = {},
   ): Promise<DaykeeperMessageList> {
     const id = positiveInteger(conversationId, "conversationId");
-    const after =
-      options.after === undefined
-        ? ""
-        : `?after=${positiveInteger(options.after, "after")}`;
-    return this.#request(`/v1/conversations/${id}/messages${after}`, {
+    if (options.after !== undefined && options.before !== undefined) {
+      throw configurationError("before and after cannot be combined");
+    }
+    const params = new URLSearchParams();
+    if (options.after !== undefined) {
+      params.set("after", String(positiveInteger(options.after, "after")));
+    }
+    if (options.before !== undefined) {
+      params.set("before", String(positiveInteger(options.before, "before")));
+    }
+    params.set("pagination", "cursor");
+    const query = params.size ? `?${params}` : "";
+    return this.#request<unknown>(`/v1/conversations/${id}/messages${query}`, {
       signal: options.signal,
-    });
+    }).then(validateCursorMessageList);
   }
 
   sendMessage(
@@ -541,6 +552,25 @@ function utf8LengthExceeds(value: string, maximum: number): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validateCursorMessageList(payload: unknown): DaykeeperMessageList {
+  if (
+    !isRecord(payload) ||
+    payload.pagination !== "cursor" ||
+    !Array.isArray(payload.messages) ||
+    payload.messages.length > 20 ||
+    !payload.messages.every(
+      (message) =>
+        isRecord(message) &&
+        typeof message.id === "number" &&
+        Number.isSafeInteger(message.id) &&
+        message.id > 0,
+    )
+  ) {
+    throw invalidResponse();
+  }
+  return payload as unknown as DaykeeperMessageList;
 }
 
 function responseTooLarge(): DaykeeperWebTransportError {

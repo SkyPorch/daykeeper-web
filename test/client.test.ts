@@ -65,7 +65,11 @@ test("every method has the contract URL, verb, payload and browser request polic
     baseUrl: `${baseUrl}///`,
     getAccessToken: () => `${syntheticToken}-${++tokenCalls}`,
     fetch: async (input, init) => {
-      requests.push(dispatchedRequest(input, init));
+      const request = dispatchedRequest(input, init);
+      requests.push(request);
+      if (new URL(request.url).pathname.endsWith("/messages")) {
+        return Response.json({ pagination: "cursor", messages: [] });
+      }
       return Response.json({ ok: true });
     },
   });
@@ -75,6 +79,7 @@ test("every method has the contract URL, verb, payload and browser request polic
   await client.getUnread();
   await client.markConversationSeen(42);
   await client.listMessages(42, { after: 7 });
+  await client.listMessages(42, { before: 11 });
   await client.sendMessage(42, "  Hello from a customer.  ");
   await client.claimAnonymousConversation("  synthetic-widget-token  ");
   const expected = [
@@ -83,7 +88,8 @@ test("every method has the contract URL, verb, payload and browser request polic
     ["POST", "/v1/conversations", null],
     ["GET", "/v1/unread", null],
     ["POST", "/v1/conversations/42/seen", null],
-    ["GET", "/v1/conversations/42/messages?after=7", null],
+    ["GET", "/v1/conversations/42/messages?after=7&pagination=cursor", null],
+    ["GET", "/v1/conversations/42/messages?before=11&pagination=cursor", null],
     [
       "POST",
       "/v1/conversations/42/messages",
@@ -567,6 +573,11 @@ test("validates safe ids, cursors, message lengths and widget token bounds", () 
     );
     assert.throws(() => client.listMessages(1, { after: id }), isConfiguration);
   }
+  assert.throws(
+    () => client.listMessages(1, { before: 2, after: 1 }),
+    isConfiguration,
+  );
+  assert.throws(() => client.listMessages(1, { before: 0 }), isConfiguration);
   for (const content of ["", "   ", "x".repeat(16_001), null])
     assert.throws(
       () => client.sendMessage(1, content as string),
@@ -577,6 +588,35 @@ test("validates safe ids, cursors, message lengths and widget token bounds", () 
       () => client.claimAnonymousConversation(value as string),
       isConfiguration,
     );
+});
+
+test("cursor reads require the cursor marker and safe bounded message IDs", async () => {
+  for (const body of [
+    { messages: [] },
+    { pagination: "legacy", messages: [] },
+    { pagination: "cursor", messages: [{ id: Number.MAX_SAFE_INTEGER + 1 }] },
+    {
+      pagination: "cursor",
+      messages: Array.from({ length: 21 }, (_, index) => ({ id: index + 1 })),
+    },
+  ]) {
+    const client = makeClient({ fetch: async () => Response.json(body) });
+    await assert.rejects(client.listMessages(42), (error) => {
+      assert(error instanceof DaykeeperWebTransportError);
+      assert.equal(error.code, "INVALID_RESPONSE");
+      return true;
+    });
+  }
+  const client = makeClient({
+    fetch: async () =>
+      Response.json({
+        pagination: "cursor",
+        messages: [{ id: Number.MAX_SAFE_INTEGER }],
+      }),
+  });
+  const page = await client.listMessages(42);
+  assert.equal(page.pagination, "cursor");
+  assert.equal(page.messages[0]!.id, Number.MAX_SAFE_INTEGER);
 });
 
 for (const kind of [
