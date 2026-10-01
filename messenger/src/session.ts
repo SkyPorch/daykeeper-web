@@ -92,14 +92,22 @@ export class VisitorSession {
     }
     if (!this.#inflight) {
       const generation = this.#generation;
-      this.#inflight = this.#exchange()
+      let exchange!: Promise<SessionGrant>;
+      exchange = this.#exchange(generation)
         .then((next) => {
-          if (generation === this.#generation) this.#grant = next;
+          if (generation !== this.#generation) {
+            // A caller may still be awaiting this exchange after shutdown
+            // forgot the visitor. Never hand that stale token to an operation
+            // that could dispatch a message with the forgotten identity.
+            throw new MessengerError("unknown");
+          }
+          this.#grant = next;
           return next;
         })
         .finally(() => {
-          this.#inflight = null;
+          if (this.#inflight === exchange) this.#inflight = null;
         });
+      this.#inflight = exchange;
     }
     return this.#inflight;
   }
@@ -111,12 +119,13 @@ export class VisitorSession {
     this.#inflight = null;
   }
 
-  async #exchange(): Promise<SessionGrant> {
+  async #exchange(generation: number): Promise<SessionGrant> {
     const stored = this.#options.store.read();
     try {
-      return await this.#post(stored);
+      return await this.#post(stored, generation);
     } catch (error) {
       if (
+        generation === this.#generation &&
         stored &&
         error instanceof MessengerError &&
         error.code === "visitor_proof_invalid"
@@ -125,7 +134,7 @@ export class VisitorSession {
         // record was tampered with). Drop it and start over as a new visitor;
         // their previous conversations are unreachable from this browser.
         this.#options.store.clear();
-        return this.#post(null);
+        return this.#post(null, generation);
       }
       throw error;
     }
@@ -137,6 +146,7 @@ export class VisitorSession {
       secret: string;
       hasConversation: boolean;
     } | null,
+    generation: number,
   ): Promise<SessionGrant> {
     const controller = new AbortController();
     const timer = setTimeout(
@@ -203,7 +213,12 @@ export class VisitorSession {
     }
 
     const grant = this.#parse(payload, stored);
-    if (!stored || stored.visitorId !== grant.visitorId) {
+    // Shutdown({forget:true}) may clear persistent storage while this request
+    // is in flight. A late response must never resurrect the forgotten proof.
+    if (
+      generation === this.#generation &&
+      (!stored || stored.visitorId !== grant.visitorId)
+    ) {
       const minted = readVisitor(payload);
       if (minted?.secret) {
         this.#options.store.write({

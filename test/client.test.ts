@@ -75,6 +75,7 @@ test("every method has the contract URL, verb, payload and browser request polic
   await client.getUnread();
   await client.markConversationSeen(42);
   await client.listMessages(42, { after: 7 });
+  await client.listMessages(42, { before: 11 });
   await client.sendMessage(42, "  Hello from a customer.  ");
   await client.claimAnonymousConversation("  synthetic-widget-token  ");
   const expected = [
@@ -84,6 +85,7 @@ test("every method has the contract URL, verb, payload and browser request polic
     ["GET", "/v1/unread", null],
     ["POST", "/v1/conversations/42/seen", null],
     ["GET", "/v1/conversations/42/messages?after=7", null],
+    ["GET", "/v1/conversations/42/messages?before=11", null],
     [
       "POST",
       "/v1/conversations/42/messages",
@@ -567,6 +569,11 @@ test("validates safe ids, cursors, message lengths and widget token bounds", () 
     );
     assert.throws(() => client.listMessages(1, { after: id }), isConfiguration);
   }
+  assert.throws(
+    () => client.listMessages(1, { before: 2, after: 1 }),
+    isConfiguration,
+  );
+  assert.throws(() => client.listMessages(1, { before: 0 }), isConfiguration);
   for (const content of ["", "   ", "x".repeat(16_001), null])
     assert.throws(
       () => client.sendMessage(1, content as string),

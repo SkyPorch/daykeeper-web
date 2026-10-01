@@ -72,21 +72,30 @@ must be enforced by the server; the SDK cannot prove them client-side.
 
 ## Customer API
 
-| Method                                              | Behavior                                                            |
-| --------------------------------------------------- | ------------------------------------------------------------------- |
-| `getIdentity(options?)`                             | Read verified customer identity.                                    |
-| `listConversations(options?)`                       | Read customer-owned conversation summaries.                         |
-| `createConversation(options?)`                      | Explicitly create a conversation.                                   |
-| `listMessages(conversationId, { after?, signal? })` | Read visible messages; optional positive-integer cursor.            |
-| `sendMessage(conversationId, content, options?)`    | Explicitly send trimmed plain text, up to 16,000 UTF-16 code units. |
-| `getUnread(options?)`                               | Read customer-side unread state.                                    |
-| `markConversationSeen(conversationId, options?)`    | Explicitly persist a seen marker.                                   |
-| `claimAnonymousConversation(widgetToken, options?)` | Explicitly claim an existing anonymous thread after sign-in.        |
+| Method                                                       | Behavior                                                                              |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `getIdentity(options?)`                                      | Read verified customer identity.                                                      |
+| `listConversations(options?)`                                | Read customer-owned conversation summaries.                                           |
+| `createConversation(options?)`                               | Explicitly create a conversation.                                                     |
+| `listMessages(conversationId, { after?, before?, signal? })` | Read visible messages; `before` loads older history and `after` polls newer messages. |
+| `sendMessage(conversationId, content, options?)`             | Explicitly send trimmed plain text, up to 16,000 UTF-16 code units.                   |
+| `getUnread(options?)`                                        | Read customer-side unread state.                                                      |
+| `markConversationSeen(conversationId, options?)`             | Explicitly persist a seen marker.                                                     |
+| `claimAnonymousConversation(widgetToken, options?)`          | Explicitly claim an existing anonymous thread after sign-in.                          |
 
 `options` accepts an optional `AbortSignal`. IDs and cursors must be positive
-safe integers. Anonymous claim does not bootstrap an anonymous widget or create
-a widget token. The exact OpenAPI snapshot includes backend lifecycle/erasure
-routes, but those routes are intentionally not exposed by this client.
+safe integers. `before` and `after` are mutually exclusive. The first message
+page contains the latest 20 messages; older history is returned in pages of up
+to 20, and callers should stop only after an empty page. `after` returns up to
+20 newer messages. Each normalized message-list JSON response is capped at
+786,432 bytes, so a page can contain fewer than 20 records; an individual
+message that exceeds the budget returns `413 message_too_large`. Initial and
+`before` pages keep the newest contiguous suffix; `after` keeps the oldest
+contiguous prefix. Continue either cursor from the last returned ID until an
+empty page. Anonymous claim does not bootstrap an anonymous widget or create
+a widget token. The exact OpenAPI snapshot includes backend
+lifecycle/erasure routes, but those routes are intentionally not exposed by
+this client.
 
 API-only gateways expose conversation APIs but not the embedded widget
 experience: `getIdentity()` and `claimAnonymousConversation()` require a

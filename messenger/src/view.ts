@@ -72,6 +72,8 @@ export class MessengerView {
   #homeListCard: HTMLDivElement | null = null;
   #threadIntro: HTMLDivElement | null = null;
   #threadMessages: HTMLDivElement | null = null;
+  #historyButton: HTMLButtonElement | null = null;
+  #historyStatus: HTMLParagraphElement | null = null;
   #msgRows = new Map<string, HTMLDivElement>();
   #wasOpen = false;
   #lastView = "";
@@ -378,6 +380,8 @@ export class MessengerView {
     this.#homeListCard = null;
     this.#threadIntro = null;
     this.#threadMessages = null;
+    this.#historyButton = null;
+    this.#historyStatus = null;
     this.#msgRows.clear();
     this.#jump.hidden = true;
     return true;
@@ -635,6 +639,33 @@ export class MessengerView {
         class: "messages",
         role: "log",
         "aria-label": name,
+        id: "dk-thread-messages",
+      });
+      this.#historyButton = h(
+        d,
+        "button",
+        {
+          type: "button",
+          class: "history-load",
+          "aria-controls": "dk-thread-messages",
+        },
+        this.#t.loadOlderMessages,
+      );
+      this.#historyButton.addEventListener("click", () => {
+        const container = this.#threadMessages;
+        if (!container) return;
+        const top = this.#body.scrollTop;
+        const height = this.#body.scrollHeight;
+        void this.#c.loadOlderMessages().then(() => {
+          this.#win.requestAnimationFrame(() => {
+            this.#body.scrollTop = top + (this.#body.scrollHeight - height);
+          });
+        });
+      });
+      this.#historyStatus = h(d, "p", {
+        class: "history-status",
+        role: "status",
+        "aria-live": "polite",
       });
       this.#body.append(
         h(
@@ -642,6 +673,8 @@ export class MessengerView {
           "div",
           { class: "thread" },
           this.#threadIntro,
+          this.#historyButton,
+          this.#historyStatus,
           this.#threadMessages,
         ),
       );
@@ -656,6 +689,8 @@ export class MessengerView {
     this.#lastView = key;
 
     if (!s.threadLoaded) {
+      this.#historyButton!.hidden = true;
+      this.#historyStatus!.textContent = "";
       if (!this.#threadMessages!.querySelector(".skel")) {
         for (const [width, mine] of [
           ["58%", false],
@@ -673,6 +708,16 @@ export class MessengerView {
     )) {
       skel.remove();
     }
+
+    const canLoadOlder = s.activeId !== null && !s.historyExhausted;
+    this.#historyButton!.hidden = !canLoadOlder;
+    this.#historyButton!.disabled = s.historyLoading;
+    this.#historyButton!.textContent = s.historyLoading
+      ? this.#t.loadingOlderMessages
+      : this.#t.loadOlderMessages;
+    this.#historyStatus!.textContent = s.historyError
+      ? this.#t.olderMessagesError
+      : "";
 
     const stick = fresh || this.#atBottom();
     const added = this.#syncMessages(s.thread);
@@ -732,9 +777,14 @@ export class MessengerView {
 
   #buildMessage(message: ThreadMessage): HTMLDivElement {
     const d = this.#doc;
+    const content =
+      message.content ||
+      (message.attachmentCount
+        ? this.#t.attachmentMessage(message.attachmentCount)
+        : "");
     if (message.author === "system") {
       const row = h(d, "div", { class: "system" });
-      row.append(renderRichText(d, message.content));
+      row.append(renderRichText(d, content));
       return row;
     }
     const me = message.author === "customer";
@@ -770,7 +820,7 @@ export class MessengerView {
       }
     }
     const bubble = h(d, "div", { class: "bubble" });
-    bubble.append(renderRichText(d, message.content));
+    bubble.append(renderRichText(d, content));
     const meta = h(d, "div", { class: "meta" });
     const row = h(
       d,
@@ -833,6 +883,48 @@ export class MessengerView {
     }
     if (message.status === "sending" || message.status === "unconfirmed") {
       meta.hidden = !last;
+      if (message.status === "unconfirmed" && message.reconcile) {
+        const check = h(
+          this.#doc,
+          "button",
+          { type: "button", class: "link-button" },
+          t.checkAgain,
+        );
+        check.addEventListener(
+          "click",
+          () => void this.#c.retrySend(message.key),
+        );
+        const children: Node[] = [d(this.#doc, t.maybeNotDelivered), check];
+        const candidates = message.reconcileCandidates ?? [];
+        if (candidates.length) {
+          children.push(
+            d(this.#doc, t.conversationChoiceHint(candidates.length)),
+          );
+          candidates.forEach((candidate, index) => {
+            const choose = h(
+              this.#doc,
+              "button",
+              {
+                type: "button",
+                class: "link-button",
+                "aria-label": t.selectConversation(index + 1),
+              },
+              t.useConversation,
+            );
+            choose.addEventListener(
+              "click",
+              () =>
+                void this.#c.selectReconciledConversation(
+                  message.key,
+                  candidate.id,
+                ),
+            );
+            children.push(choose);
+          });
+        }
+        meta.replaceChildren(...children);
+        return;
+      }
       meta.replaceChildren(d(this.#doc, t.sending));
       return;
     }

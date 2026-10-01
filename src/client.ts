@@ -132,14 +132,24 @@ export class DaykeeperWebClient {
 
   listMessages(
     conversationId: number,
-    options: DaykeeperWebRequestOptions & { after?: number } = {},
+    options: DaykeeperWebRequestOptions & {
+      after?: number;
+      before?: number;
+    } = {},
   ): Promise<DaykeeperMessageList> {
     const id = positiveInteger(conversationId, "conversationId");
-    const after =
-      options.after === undefined
-        ? ""
-        : `?after=${positiveInteger(options.after, "after")}`;
-    return this.#request(`/v1/conversations/${id}/messages${after}`, {
+    if (options.after !== undefined && options.before !== undefined) {
+      throw configurationError("before and after cannot be combined");
+    }
+    const params = new URLSearchParams();
+    if (options.after !== undefined) {
+      params.set("after", String(positiveInteger(options.after, "after")));
+    }
+    if (options.before !== undefined) {
+      params.set("before", String(positiveInteger(options.before, "before")));
+    }
+    const query = params.size ? `?${params}` : "";
+    return this.#request(`/v1/conversations/${id}/messages${query}`, {
       signal: options.signal,
     });
   }

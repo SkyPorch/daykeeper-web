@@ -584,6 +584,30 @@ export const css = String.raw`
   flex-direction: column;
 }
 
+.history-load {
+  align-self: center;
+  min-height: 36px;
+  margin: 8px 0 4px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.history-load:disabled {
+  opacity: 0.65;
+}
+
+.history-status {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+  text-align: center;
+}
+
 .msg {
   display: flex;
   flex-direction: column;

@@ -12,6 +12,7 @@ import {
   MessengerController,
   POLL,
   settleUnconfirmed,
+  toThreadMessage,
   type ControllerEvent,
   type ThreadMessage,
 } from "../../src/controller.ts";
@@ -168,9 +169,23 @@ function setup(options: { stored?: boolean; hasConversation?: boolean } = {}) {
       widgetConversationId: null,
     }),
     createConversation: () => ({ conversation: conversation(7) }),
-    listMessages: (_id: number, opts: { after?: number }) => ({
-      messages: serverMessages.filter((m) => m.id > (opts?.after ?? 0)),
-    }),
+    listMessages: (_id: number, opts: { after?: number; before?: number }) => {
+      if (opts?.before !== undefined) {
+        return {
+          messages: serverMessages
+            .filter((m) => m.id < opts.before!)
+            .slice(-20),
+        };
+      }
+      if (opts?.after !== undefined) {
+        return {
+          messages: serverMessages
+            .filter((m) => m.id > opts.after!)
+            .slice(0, 100),
+        };
+      }
+      return { messages: serverMessages.slice(-20) };
+    },
     sendMessage: (id: number, content: string) => {
       const sent = message(1000 + serverMessages.length, "customer", content);
       sent.conversationId = id;
@@ -428,7 +443,9 @@ test("first send creates the conversation, then posts; stores hasConversation", 
   assert.equal(await t.controller.send("  Hello there  "), true);
   await t.clock.flush();
   assert.deepEqual(
-    t.calls.map((c) => c.method).filter((m) => m !== "listMessages"),
+    t.calls
+      .map((c) => c.method)
+      .filter((m) => m !== "listMessages" && m !== "listConversations"),
     ["createConversation", "sendMessage"],
   );
   assert.deepEqual(t.calls.find((c) => c.method === "sendMessage")!.args, [
@@ -442,6 +459,277 @@ test("first send creates the conversation, then posts; stores hasConversation", 
   assert.equal(sent!.id, 1000);
   assert.equal(t.controller.state.conversations[0]?.id, 7);
   assert.equal(t.clock.pending(), POLL.threadActive);
+});
+
+test("concurrent first sends share one conversation creation", async () => {
+  const t = setup({ stored: true, hasConversation: false });
+  t.controller.newConversation();
+  await t.clock.flush();
+  let release!: () => void;
+  let started!: () => void;
+  const waiting = new Promise<void>((resolve) => (started = resolve));
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  t.handlers.createConversation = async () => {
+    started();
+    await gate;
+    return { conversation: conversation(7) };
+  };
+  const first = t.controller.send("one");
+  const second = t.controller.send("two");
+  await waiting;
+  await t.clock.flush();
+  assert.equal(t.count("createConversation"), 1);
+  release();
+  await Promise.all([first, second]);
+  assert.equal(t.count("createConversation"), 1);
+  assert.deepEqual(
+    t.serverMessages.map((entry) => entry.content),
+    ["one", "two"],
+  );
+});
+
+test("an uncertain create requires explicit selection before using a new conversation", async () => {
+  const t = setup({ stored: true, hasConversation: false });
+  t.controller.newConversation();
+  await t.clock.flush();
+  let visibleConversations: ReturnType<typeof conversation>[] = [];
+  t.handlers.listConversations = () => ({
+    conversations: visibleConversations,
+    widgetConversationId: visibleConversations[0]?.id ?? null,
+  });
+  t.handlers.createConversation = () => {
+    throw new DaykeeperWebTransportError({
+      code: "NETWORK_ERROR",
+      message: "response lost",
+      outcomeUnknown: true,
+    });
+  };
+  await t.controller.send("preserve this first reply");
+  const pending = t.controller.state.thread.at(-1)!;
+  assert.equal(pending.status, "unconfirmed");
+  assert.equal(t.count("createConversation"), 1);
+  visibleConversations = [conversation(7), conversation(8)];
+  await t.controller.retrySend(pending.key);
+  assert.equal(t.count("createConversation"), 1);
+  assert.equal(t.controller.state.activeId, null);
+  assert.deepEqual(
+    t.controller.state.thread.at(-1)?.reconcileCandidates?.map(({ id }) => id),
+    [7, 8],
+  );
+  assert.equal(t.serverMessages.length, 0);
+  await t.controller.selectReconciledConversation(pending.key, 8);
+  assert.equal(t.controller.state.activeId, 8);
+  assert.deepEqual(
+    t.serverMessages.map((entry) => entry.content),
+    ["preserve this first reply"],
+  );
+  assert.equal(t.controller.state.thread.at(-1)?.status, "sent");
+});
+
+test("an explicit retry can create after reconciliation confirms no conversation exists", async () => {
+  const t = setup({ stored: true, hasConversation: false });
+  t.controller.newConversation();
+  await t.clock.flush();
+  t.handlers.createConversation = () => {
+    if (t.count("createConversation") === 1) {
+      throw new DaykeeperWebTransportError({
+        code: "NETWORK_ERROR",
+        message: "response lost",
+        outcomeUnknown: true,
+      });
+    }
+    return { conversation: conversation(8) };
+  };
+  await t.controller.send("recover this reply");
+  const pending = t.controller.state.thread.at(-1)!;
+  assert.equal(pending.status, "unconfirmed");
+  assert.equal(t.count("createConversation"), 1);
+  await t.controller.retrySend(pending.key);
+  assert.equal(t.count("createConversation"), 2);
+  assert.deepEqual(
+    t.serverMessages.map((entry) => entry.content),
+    ["recover this reply"],
+  );
+  assert.equal(t.controller.state.thread.at(-1)?.status, "sent");
+});
+
+test("a higher-id local send cannot skip unread messages on the next poll", async () => {
+  const t = setup({ stored: true, hasConversation: true });
+  t.serverMessages.push(
+    ...Array.from({ length: 21 }, (_, index) =>
+      message(index + 1, "agent", `old ${index + 1}`),
+    ),
+  );
+  t.controller.open();
+  await t.clock.flush();
+  t.controller.openConversation(7);
+  await t.clock.flush();
+  assert.equal(t.controller.state.thread.at(-1)?.id, 21);
+  t.serverMessages.push(
+    ...Array.from({ length: 9 }, (_, index) =>
+      message(index + 22, "agent", `unread ${index + 22}`),
+    ),
+  );
+  await t.controller.send("local reply");
+  const localReplyId = t.controller.state.thread.at(-1)?.id;
+  assert.ok(localReplyId! > 30);
+  await t.clock.advance(POLL.threadActive);
+  const latestPoll = t.calls
+    .filter((call) => call.method === "listMessages")
+    .at(-1)!;
+  assert.deepEqual(latestPoll.args, [7, { after: 21 }]);
+  assert.ok(
+    t.controller.state.thread.some((entry) => entry.content === "unread 22"),
+  );
+  assert.ok(
+    t.controller.state.thread.some((entry) => entry.content === "unread 30"),
+  );
+});
+
+test("load older messages pages before the oldest visible message and exhausts only on empty", async () => {
+  const t = setup({ stored: true, hasConversation: true });
+  t.serverMessages.push(
+    ...Array.from({ length: 45 }, (_, index) =>
+      message(index + 1, "customer", `message ${index + 1}`),
+    ),
+  );
+  t.controller.open();
+  await t.clock.flush();
+  t.controller.openConversation(7);
+  await t.clock.flush();
+  assert.deepEqual(
+    t.controller.state.thread.map((entry) => entry.id),
+    Array.from({ length: 20 }, (_, index) => index + 26),
+  );
+  assert.equal(t.controller.state.historyExhausted, false);
+  await t.controller.loadOlderMessages();
+  assert.deepEqual(
+    t.controller.state.thread.map((entry) => entry.id),
+    Array.from({ length: 40 }, (_, index) => index + 6),
+  );
+  assert.equal(t.controller.state.historyExhausted, false);
+  await t.controller.loadOlderMessages();
+  assert.deepEqual(
+    t.controller.state.thread.map((entry) => entry.id),
+    Array.from({ length: 45 }, (_, index) => index + 1),
+  );
+  assert.equal(t.controller.state.historyExhausted, false);
+  await t.controller.loadOlderMessages();
+  assert.equal(t.controller.state.historyExhausted, true);
+});
+
+test("load older advances from raw message IDs even when a page renders nothing", async () => {
+  const t = setup({ stored: true, hasConversation: true });
+  t.serverMessages.push(
+    ...Array.from({ length: 45 }, (_, index) =>
+      message(
+        index + 1,
+        "customer",
+        index + 1 >= 6 && index + 1 <= 25 ? "" : `message ${index + 1}`,
+      ),
+    ),
+  );
+  t.controller.open();
+  await t.clock.flush();
+  t.controller.openConversation(7);
+  await t.clock.flush();
+  assert.deepEqual(
+    t.controller.state.thread.map((entry) => entry.id),
+    Array.from({ length: 20 }, (_, index) => index + 26),
+  );
+  await t.controller.loadOlderMessages();
+  assert.equal(t.controller.state.thread.length, 20);
+  assert.equal(t.controller.state.historyExhausted, false);
+  assert.equal(t.controller.state.historyCursorBefore, 6);
+  await t.controller.loadOlderMessages();
+  assert.deepEqual(
+    t.controller.state.thread.map((entry) => entry.id),
+    [1, 2, 3, 4, 5, ...Array.from({ length: 20 }, (_, index) => index + 26)],
+  );
+  await t.controller.loadOlderMessages();
+  assert.equal(t.controller.state.historyExhausted, true);
+});
+
+test("thread polls preserve exhausted history and older-page errors", async () => {
+  const t = setup({ stored: true, hasConversation: true });
+  t.serverMessages.push(message(5, "customer", "visible"));
+  t.controller.open();
+  await t.clock.flush();
+  t.controller.openConversation(7);
+  await t.clock.flush();
+
+  await t.controller.loadOlderMessages();
+  assert.equal(t.controller.state.historyExhausted, true);
+  await t.clock.advance(POLL.threadActive);
+  assert.equal(t.controller.state.historyExhausted, true);
+
+  const failed = setup({ stored: true, hasConversation: true });
+  failed.serverMessages.push(message(5, "customer", "visible"));
+  failed.controller.open();
+  await failed.clock.flush();
+  failed.controller.openConversation(7);
+  await failed.clock.flush();
+  failed.handlers.listMessages = () => {
+    throw new DaykeeperWebTransportError({
+      code: "NETWORK_ERROR",
+      message: "history offline",
+      retryable: true,
+    });
+  };
+  await failed.controller.loadOlderMessages();
+  assert.equal(failed.controller.state.historyError, true);
+  failed.handlers.listMessages = undefined;
+  await failed.clock.advance(failed.clock.pending());
+  assert.equal(failed.controller.state.historyError, true);
+});
+
+test("loading older history does not settle an unconfirmed send with matching text", async () => {
+  const t = setup({ stored: true, hasConversation: true });
+  t.serverMessages.push(
+    ...Array.from({ length: 25 }, (_, index) =>
+      message(
+        index + 1,
+        "customer",
+        index === 0 ? "same words" : `old ${index + 1}`,
+      ),
+    ),
+  );
+  t.controller.open();
+  await t.clock.flush();
+  t.controller.openConversation(7);
+  await t.clock.flush();
+  t.handlers.sendMessage = () => {
+    throw new DaykeeperWebTransportError({
+      code: "NETWORK_ERROR",
+      message: "response lost",
+      outcomeUnknown: true,
+    });
+  };
+  await t.controller.send("same words");
+  const pending = t.controller.state.thread.at(-1)!;
+  assert.equal(pending.status, "unconfirmed");
+  await t.controller.loadOlderMessages();
+  assert.equal(
+    t.controller.state.thread.find((entry) => entry.key === pending.key)
+      ?.status,
+    "unconfirmed",
+  );
+});
+
+test("attachment-only customer messages remain visible without opening their URL", () => {
+  const mapped = toThreadMessage({
+    ...message(8, "customer", ""),
+    attachments: [
+      {
+        id: 1,
+        fileType: "image/png",
+        dataUrl: "https://files.example.test/private.png",
+        thumbUrl: "https://files.example.test/thumb.png",
+      },
+    ],
+  });
+  assert.equal(mapped?.content, "");
+  assert.equal(mapped?.attachmentCount, 1);
 });
 
 test("rejects empty and over-long messages locally", async () => {
