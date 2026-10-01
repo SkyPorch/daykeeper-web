@@ -3,8 +3,14 @@
 For more about Daykeeper, visit [mydaykeeper.com](https://www.mydaykeeper.com).
 
 A headless browser client for customer-facing Daykeeper support experiences.
-It provides typed customer operations, not a visual messenger, installation
-snippet, React wrapper, or administrative API.
+It provides typed customer operations, not a UI, React wrapper, or
+administrative API.
+
+For a ready-made chat UI, use **Daykeeper Messenger**, the Intercom-style web
+messenger in [`messenger/`](messenger/README.md). It is built on this client and
+installs with one script tag from `https://cdn.mydaykeeper.com/messenger/v1/messenger.js`.
+The console's "Add chat to your app" step gives you the snippet. The messenger
+is not published to npm.
 
 Version `0.2.0` is the first approved public release candidate. Publication is
 performed only by the protected release workflow after the gates in
@@ -84,14 +90,15 @@ routes, but those routes are intentionally not exposed by this client.
 API-only gateways expose conversation APIs but not the embedded widget
 experience: `getIdentity()` and `claimAnonymousConversation()` require a
 widget-enabled tenant and return HTTP 409 with the safe `widget_unavailable`
-code on an API-only gateway. API-only routes also reject browser Origin headers;
-this SDK does not bypass that restriction. Browser integrations require a
-website inbox with an admitted origin. Use a native client for API-only mobile
-integrations.
+code on an API-only gateway. Browser requests are accepted only from an origin
+the inbox admits, such as one of its web client's allowed websites; any other
+origin gets `403 origin_not_allowed`, and this SDK does not bypass that.
+Requests without an `Origin` header, from native or server code, are unaffected.
 
 Returned content is untrusted customer/agent data. Render plain text safely;
-do not insert messages into `innerHTML`. A future visual messenger must supply
-its own reviewed rendering, accessibility, attachment, and navigation policies.
+do not insert messages into `innerHTML`. A custom UI built on this client must
+supply its own reviewed rendering, accessibility, attachment, and navigation
+policies, as Daykeeper Messenger does.
 
 ## Deadlines, authentication, and writes
 
