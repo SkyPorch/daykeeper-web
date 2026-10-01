@@ -153,6 +153,7 @@ test.describe("open, send, receive", () => {
         /\/messages(?:\?|$)/.test(r.path) &&
         !/[?&](?:after|before)=\d+/.test(r.path),
     );
+    expect(initialRead.length).toBeGreaterThan(0);
     const nextPoll = waitForRequest(
       mock,
       (r) => r.method === "GET" && /messages\?after=\d+$/.test(r.path),
