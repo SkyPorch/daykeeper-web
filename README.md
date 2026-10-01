@@ -1,5 +1,7 @@
 # `@skyporch/daykeeper-web`
 
+For more about Daykeeper, visit [mydaykeeper.com](https://www.mydaykeeper.com).
+
 A headless browser client for customer-facing Daykeeper support experiences.
 It provides typed customer operations, not a visual messenger, installation
 snippet, React wrapper, or administrative API.
