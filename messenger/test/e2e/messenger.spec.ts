@@ -144,12 +144,34 @@ test.describe("open, send, receive", () => {
     await m.textarea.fill("hello");
     await m.textarea.press("Enter");
     await expect(m.messages.locator(".msg")).toHaveCount(1);
-    const polls = await waitForRequest(
+    // A new thread has no active server conversation until this send creates
+    // it, so this first list call establishes the fetched cursor.
+    const initialRead = await waitForRequest(
+      mock,
+      (r) =>
+        r.method === "GET" &&
+        /\/messages(?:\?|$)/.test(r.path) &&
+        !/[?&](?:after|before)=\d+/.test(r.path),
+    );
+    const nextPoll = waitForRequest(
       mock,
       (r) => r.method === "GET" && /messages\?after=\d+$/.test(r.path),
-      8_000,
+      15_000,
     );
+    const polls = await nextPoll;
     expect(polls[0]!.path).toMatch(/after=5001$/);
+    const requests = (await mock.state()).requests;
+    const initialIndex = requests.findIndex(
+      (r) =>
+        r.method === "GET" &&
+        /\/messages(?:\?|$)/.test(r.path) &&
+        !/[?&](?:after|before)=\d+/.test(r.path),
+    );
+    const afterIndex = requests.findIndex((r) =>
+      /messages\?after=\d+$/.test(r.path),
+    );
+    expect(initialIndex).toBeGreaterThanOrEqual(0);
+    expect(afterIndex).toBeGreaterThan(initialIndex);
   });
 
   test("showNewMessage opens a prefilled composer without sending", async ({
@@ -949,14 +971,25 @@ test.describe("isolation", () => {
     );
     await expect(m.launcher).toBeHidden();
     await page.getByRole("button", { name: "Ask a question" }).focus();
-    await page.evaluate(() =>
+    await page.evaluate(() => {
       (window as unknown as { Daykeeper: (c: string) => void }).Daykeeper(
         "show",
-      ),
-    );
-    await expect(m.panel).toBeVisible();
-    await page.keyboard.press("Escape");
+      );
+      // Escape in the same task targets the page control before the widget's
+      // scheduled focus transfer; the open panel must still be dismissible.
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Escape",
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+        }),
+      );
+    });
     await expect(m.panel).toBeHidden();
+    await expect(
+      page.getByRole("button", { name: "Ask a question" }),
+    ).toBeFocused();
   });
 
   test("the snippet queue works when commands run before the script loads", async ({

@@ -1066,6 +1066,34 @@ export class MessengerView {
     const active = this.#doc.activeElement;
     this.#returnFocus = active && active !== this.host ? active : null;
     this.#syncMobile();
+    // `show()` can open the panel from a page control. Until the scheduled
+    // shadow focus transfer runs, an immediate Escape is targeted at that
+    // page control and never reaches the widget's key handler. Catch only
+    // Escape from the page's current focus (or an unfocused document), and
+    // only while the panel is open; normal page keyboard handling is intact.
+    const onPageEscape = (event: KeyboardEvent) => {
+      if (
+        event.key !== "Escape" ||
+        event.isComposing ||
+        !this.#c.state.open ||
+        event.composedPath().includes(this.host)
+      )
+        return;
+      const focused = this.#doc.activeElement;
+      if (
+        focused !== this.#returnFocus &&
+        focused !== this.#doc.body &&
+        focused !== this.#doc.documentElement
+      )
+        return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.#c.close();
+    };
+    this.#doc.addEventListener("keydown", onPageEscape, true);
+    this.#openCleanup.push(() =>
+      this.#doc.removeEventListener("keydown", onPageEscape, true),
+    );
     this.#clock = setInterval(() => this.#refreshTimes(), 30_000);
   }
 
