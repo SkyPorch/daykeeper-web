@@ -7,12 +7,13 @@ import {
   type MessengerState,
   type ThreadMessage,
 } from "./controller.ts";
-import { h, icon, initial, initials } from "./dom.ts";
+import { avatar, avatarStack, h, icon, initial } from "./dom.ts";
 import type { MessengerErrorCode } from "./errors.ts";
 import { renderRichText } from "./richText.ts";
+import type { TeamMember } from "./profile.ts";
 import type { Strings } from "./strings.ts";
 import { css } from "./styles.ts";
-import { absoluteTime, relativeTime } from "./time.ts";
+import { absoluteTime, relativeTime, returnParts } from "./time.ts";
 
 export interface ViewOptions {
   theme: "auto" | "light" | "dark";
@@ -52,6 +53,8 @@ export class MessengerView {
   #panel!: HTMLElement;
   #back!: HTMLButtonElement;
   #monogram!: HTMLSpanElement;
+  #stack!: HTMLSpanElement;
+  #stackKey = "";
   #title!: HTMLHeadingElement;
   #banner!: HTMLDivElement;
   #body!: HTMLDivElement;
@@ -69,8 +72,12 @@ export class MessengerView {
   #homeList: HTMLUListElement | null = null;
   #homeRows = new Map<number, HTMLLIElement>();
   #homeHero: HTMLHeadingElement | null = null;
+  #homeTeam: HTMLDivElement | null = null;
+  #homeReply: HTMLParagraphElement | null = null;
   #homeListCard: HTMLDivElement | null = null;
   #threadIntro: HTMLDivElement | null = null;
+  #introAvatar: HTMLDivElement | null = null;
+  #introReply: HTMLParagraphElement | null = null;
   #threadMessages: HTMLDivElement | null = null;
   #msgRows = new Map<string, HTMLDivElement>();
   #wasOpen = false;
@@ -174,6 +181,9 @@ export class MessengerView {
       class: "monogram",
       "aria-hidden": "true",
     });
+    // The team's faces replace the monogram once the gateway names them.
+    this.#stack = h(d, "span", { class: "stack-slot" });
+    this.#stack.hidden = true;
     this.#title = h(d, "h2", { class: "topbar-name", id: "dk-title" });
     const close = h(
       d,
@@ -192,6 +202,7 @@ export class MessengerView {
         "div",
         { class: "topbar-title" },
         this.#monogram,
+        this.#stack,
         h(d, "div", { style: null }, this.#title),
       ),
       close,
@@ -339,8 +350,18 @@ export class MessengerView {
   #renderChrome(s: MessengerState): void {
     const name = s.inbox?.name ?? "";
     this.#title.textContent = name;
+    const team = s.profile.team;
+    const key = teamKey(team);
+    if (key !== this.#stackKey) {
+      this.#stackKey = key;
+      this.#stack.replaceChildren(
+        ...(team.length ? [avatarStack(this.#doc, team, "small")] : []),
+      );
+    }
+    // Home shows the team large under the topbar; once is enough.
+    this.#stack.hidden = team.length === 0 || s.view === "home";
     this.#monogram.textContent = initial(name || "D");
-    this.#monogram.hidden = !name;
+    this.#monogram.hidden = !name || team.length > 0;
     const inThread =
       s.view === "thread" && s.phase !== "error" && s.phase !== "connecting";
     this.#panel.classList.toggle("view-thread", inThread);
@@ -375,8 +396,12 @@ export class MessengerView {
     this.#homeList = null;
     this.#homeRows.clear();
     this.#homeHero = null;
+    this.#homeTeam = null;
+    this.#homeReply = null;
     this.#homeListCard = null;
     this.#threadIntro = null;
+    this.#introAvatar = null;
+    this.#introReply = null;
     this.#threadMessages = null;
     this.#msgRows.clear();
     this.#jump.hidden = true;
@@ -464,6 +489,8 @@ export class MessengerView {
     const t = this.#t;
     if (this.#setScreen("home", "")) {
       this.#homeHero = h(d, "h3", { class: "hero-title" });
+      this.#homeTeam = h(d, "div", { class: "hero-team" });
+      this.#homeReply = h(d, "p", { class: "hero-reply" });
       const start = h(
         d,
         "button",
@@ -512,7 +539,14 @@ export class MessengerView {
           d,
           "div",
           { class: "home" },
-          h(d, "div", { class: "hero" }, this.#homeHero),
+          h(
+            d,
+            "div",
+            { class: "hero" },
+            this.#homeTeam,
+            this.#homeHero,
+            this.#homeReply,
+          ),
           startCard,
           this.#homeListCard,
           footer,
@@ -523,6 +557,8 @@ export class MessengerView {
     const greeting = s.inbox?.greeting ?? t.defaultGreeting;
     this.#homeHero!.textContent = greeting;
     this.#homeHero!.classList.toggle("long", greeting.length > 70);
+    this.#syncTeam(this.#homeTeam!, s.profile.team, "hero-stack");
+    this.#syncReply(this.#homeReply!, s);
     this.#homeListCard!.hidden = s.conversations.length === 0;
     this.#syncRows(s.conversations);
   }
@@ -533,6 +569,7 @@ export class MessengerView {
     const now = Date.now();
     const name = this.#c.state.inbox?.name ?? "";
     conversations.forEach((entry, index) => {
+      const who: TeamMember | null = entry.assignee;
       seen.add(entry.id);
       let li = this.#homeRows.get(entry.id);
       if (!li) {
@@ -543,12 +580,27 @@ export class MessengerView {
       const preview = button.querySelector(".row-preview")!;
       const meta = button.querySelector(".row-meta")!;
       const dot = button.querySelector(".dot") as HTMLElement;
-      const monogram = button.querySelector(".monogram")!;
-      monogram.textContent = initial(name || "D");
+      // The person on the thread, when there is one; else the inbox.
+      const slot = button.querySelector(".row-avatar") as HTMLElement;
+      const slotKey = who ? `p:${teamKey([who])}` : `i:${name}`;
+      if (slot.dataset.who !== slotKey) {
+        slot.dataset.who = slotKey;
+        slot.replaceChildren(
+          who
+            ? avatar(this.#doc, who.name, who.avatarUrl)
+            : h(
+                this.#doc,
+                "span",
+                { class: "monogram", "aria-hidden": "true" },
+                initial(name || "D"),
+              ),
+        );
+      }
       preview.textContent =
         entry.preview ?? this.#t.conversationFallbackPreview;
       const when = relativeTime(entry.updatedAt, now, this.#o.locale);
-      meta.textContent = when ? `${name} · ${when}` : name;
+      const label = who?.name ?? name;
+      meta.textContent = when ? `${label} · ${when}` : label;
       button.classList.toggle("unread", entry.unread > 0);
       dot.hidden = entry.unread === 0;
       button.setAttribute(
@@ -579,7 +631,7 @@ export class MessengerView {
       d,
       "button",
       { type: "button", class: "row", "data-conversation": id },
-      h(d, "span", { class: "monogram", "aria-hidden": "true" }),
+      h(d, "span", { class: "row-avatar" }),
       h(
         d,
         "span",
@@ -613,16 +665,13 @@ export class MessengerView {
     }
     if (fresh) {
       const name = s.inbox?.name ?? "";
+      this.#introAvatar = h(d, "div", { class: "intro-avatar" });
+      this.#introReply = h(d, "p", { class: "intro-reply" });
       this.#threadIntro = h(
         d,
         "div",
         { class: "intro" },
-        h(
-          d,
-          "span",
-          { class: "monogram large", "aria-hidden": "true" },
-          initial(name || "D"),
-        ),
+        this.#introAvatar,
         h(d, "p", { class: "intro-name" }, name),
         h(
           d,
@@ -630,6 +679,7 @@ export class MessengerView {
           { class: "intro-greeting" },
           s.inbox?.greeting ?? this.#t.defaultGreeting,
         ),
+        this.#introReply,
       );
       this.#threadMessages = h(d, "div", {
         class: "messages",
@@ -654,6 +704,7 @@ export class MessengerView {
       this.#syncComposer();
     }
     this.#lastView = key;
+    this.#syncIntro(s);
 
     if (!s.threadLoaded) {
       if (!this.#threadMessages!.querySelector(".skel")) {
@@ -749,12 +800,7 @@ export class MessengerView {
               { class: "monogram small", "aria-hidden": "true" },
               initial(name),
             )
-          : h(
-              d,
-              "span",
-              { class: "monogram small person", "aria-hidden": "true" },
-              initials(name),
-            ),
+          : avatar(d, name, message.senderAvatarUrl, "small"),
         h(d, "span", { class: "author-name" }, name),
       );
       if (message.author === "agent") {
@@ -856,6 +902,67 @@ export class MessengerView {
       when,
     );
     meta.replaceChildren(...(me ? [d(this.#doc, `${t.you} ·`), time] : [time]));
+  }
+
+  // ---- team and reply time --------------------------------------------
+
+  #syncTeam(
+    slot: HTMLElement,
+    team: readonly TeamMember[],
+    className: string,
+  ): void {
+    const key = teamKey(team);
+    if (slot.dataset.team === key) return;
+    slot.dataset.team = key;
+    slot.hidden = team.length === 0;
+    slot.replaceChildren(
+      ...(team.length ? [avatarStack(this.#doc, team, className)] : []),
+    );
+    if (team.length)
+      slot.setAttribute(
+        "title",
+        this.#t.teamLabel(team.map((member) => member.name)),
+      );
+    else slot.removeAttribute("title");
+  }
+
+  #syncIntro(s: MessengerState): void {
+    const slot = this.#introAvatar;
+    if (!slot) return;
+    const team = s.profile.team;
+    const name = s.inbox?.name ?? "";
+    const key = team.length ? `t:${teamKey(team)}` : `i:${name}`;
+    if (slot.dataset.team !== key) {
+      slot.dataset.team = key;
+      slot.replaceChildren(
+        team.length
+          ? avatarStack(this.#doc, team, "large")
+          : h(
+              this.#doc,
+              "span",
+              { class: "monogram large", "aria-hidden": "true" },
+              initial(name || "D"),
+            ),
+      );
+    }
+    this.#syncReply(this.#introReply!, s);
+  }
+
+  /** "We typically reply in a few minutes", or when the team is back. */
+  #replyLine(s: MessengerState): string | null {
+    const reply = s.profile.replyTime;
+    if (!reply) return null;
+    const t = this.#t;
+    if (reply.open) return t.replyTime[reply.expectation];
+    const parts = returnParts(reply.nextOpenAt, Date.now(), this.#o.locale);
+    return parts ? t.awayBack(t.backAt(parts.day, parts.time)) : t.away;
+  }
+
+  #syncReply(line: HTMLElement, s: MessengerState): void {
+    const text = this.#replyLine(s);
+    line.hidden = text === null;
+    if (text !== null && line.textContent !== text) line.textContent = text;
+    line.classList.toggle("away", s.profile.replyTime?.open === false);
   }
 
   #nameFor(message: ThreadMessage): string {
@@ -1060,7 +1167,10 @@ export class MessengerView {
 
   #refreshTimes(): void {
     const s = this.#c.state;
-    if (s.view === "home" && this.#homeList) this.#syncRows(s.conversations);
+    if (s.view === "home" && this.#homeList) {
+      this.#syncRows(s.conversations);
+      if (this.#homeReply) this.#syncReply(this.#homeReply, s);
+    }
     if (s.view === "thread" && this.#threadMessages && s.threadLoaded) {
       this.#syncMessages(s.thread);
     }
@@ -1076,6 +1186,12 @@ export class MessengerView {
 
 function d(doc: Document, text: string): Text {
   return doc.createTextNode(text);
+}
+
+function teamKey(team: readonly TeamMember[]): string {
+  return team
+    .map((member) => `${member.name}\u0000${member.avatarUrl ?? ""}`)
+    .join("\u0001");
 }
 
 function sameGroup(a: ThreadMessage, b: ThreadMessage): boolean {

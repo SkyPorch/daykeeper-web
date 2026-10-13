@@ -11,6 +11,15 @@ import {
   toMessengerError,
   type MessengerErrorCode,
 } from "./errors.ts";
+import {
+  EMPTY_PROFILE,
+  fetchProfile,
+  photoUrl,
+  teamMemberOf,
+  type MessengerProfile,
+  type ProfileFetcher,
+  type TeamMember,
+} from "./profile.ts";
 import type { InboxInfo, VisitorSession } from "./session.ts";
 import type { VisitorStore } from "./storage.ts";
 import { toMillis } from "./time.ts";
@@ -28,7 +37,8 @@ import { toMillis } from "./time.ts";
  *   idle minutes, 120 s while hidden; errors back off exponentially to 5 min;
  * - open home: the conversation list every 30 s (120 s hidden).
  * Nothing contacts the network until the panel opens or the stored visitor
- * already has a conversation.
+ * already has a conversation. The team and reply-time line (GET
+ * /v1/messenger) load once the panel is open, at most every 5 minutes.
  */
 
 export type Author = "customer" | "agent" | "human" | "system";
@@ -40,6 +50,8 @@ export interface ThreadMessage {
   id: number | null;
   author: Author;
   senderName: string | null;
+  /** The replying person's photo; shown for human replies only. */
+  senderAvatarUrl: string | null;
   content: string;
   createdAt: number | null;
   status: SendStatus;
@@ -54,6 +66,8 @@ export interface ConversationSummary {
   updatedAt: number | null;
   unread: number;
   preview: string | null;
+  /** The person handling this conversation, when the gateway names one. */
+  assignee: TeamMember | null;
 }
 
 export type Phase = "idle" | "connecting" | "ready" | "error";
@@ -67,6 +81,8 @@ export interface MessengerState {
   /** Reads are failing after we were connected; data shown may be stale. */
   degraded: boolean;
   inbox: InboxInfo | null;
+  /** Team avatars and the reply-time line; empty until loaded or if absent. */
+  profile: MessengerProfile;
   conversations: ConversationSummary[];
   conversationsLoaded: boolean;
   /** null while composing a brand-new conversation. */
@@ -89,6 +105,7 @@ export interface ControllerEnvironment {
   now?: () => number;
   timers?: Timers;
   isVisible?: () => boolean;
+  fetchProfile?: ProfileFetcher;
   createClient?: (
     gatewayUrl: string,
     getToken: (force: boolean) => Promise<string>,
@@ -115,6 +132,7 @@ export const POLL = {
   homeVisible: 30_000,
   homeHidden: 120_000,
   maxBackoff: 300_000,
+  profile: 300_000,
 } as const;
 
 type Listener = (event: ControllerEvent) => void;
@@ -135,6 +153,7 @@ export class MessengerController {
     error: null,
     degraded: false,
     inbox: null,
+    profile: EMPTY_PROFILE,
     conversations: [],
     conversationsLoaded: false,
     activeId: null,
@@ -159,6 +178,8 @@ export class MessengerController {
   #sessionError: MessengerError | null = null;
   #stopped = false;
   #threadToken = 0;
+  #profileAt = -Infinity;
+  #profileLoading = false;
   /**
    * The gateway reflects CORS only after it verified the token, so an
    * expired or rejected token reaches us as an opaque network failure, not a
@@ -178,6 +199,7 @@ export class MessengerController {
       isVisible: () =>
         typeof document === "undefined" ||
         document.visibilityState !== "hidden",
+      fetchProfile,
       ...env,
     };
   }
@@ -295,6 +317,7 @@ export class MessengerController {
       id: null,
       author: "customer",
       senderName: null,
+      senderAvatarUrl: null,
       content,
       createdAt: this.#env.now(),
       status: "sending",
@@ -477,6 +500,7 @@ export class MessengerController {
       const client = await this.#ensureConnected();
       if (!client) return;
       await this.#refreshIfSuspect();
+      if (open) void this.#loadProfile();
       if (!open) await this.#pollUnread(client);
       else if (view === "home") await this.#pollConversations(client);
       else if (activeId !== null) await this.#pollThread(client, activeId);
@@ -493,6 +517,31 @@ export class MessengerController {
     } finally {
       this.#busy = false;
       this.#reschedule();
+    }
+  }
+
+  /**
+   * Team avatars and the reply-time line. Never fails the messenger: the
+   * fetcher answers an empty profile for anything but a good response, and
+   * a failure waits the same five minutes as a success.
+   */
+  async #loadProfile(): Promise<void> {
+    if (
+      this.#profileLoading ||
+      this.#env.now() - this.#profileAt < POLL.profile
+    )
+      return;
+    this.#profileLoading = true;
+    try {
+      const gatewayUrl = this.#clientGateway;
+      const token = await this.#env.session.token();
+      const profile = await this.#env.fetchProfile(gatewayUrl, token);
+      if (!this.#stopped) this.#set({ profile });
+    } catch {
+      /* decoration only */
+    } finally {
+      this.#profileAt = this.#env.now();
+      this.#profileLoading = false;
     }
   }
 
@@ -691,6 +740,7 @@ export function toThreadMessage(
       typeof message.sender?.name === "string" && message.sender.name.trim()
         ? message.sender.name.trim().slice(0, 80)
         : null,
+    senderAvatarUrl: photoUrl(message.sender?.avatarUrl),
     content,
     createdAt: toMillis(message.createdAt),
     status: "sent",
@@ -709,6 +759,10 @@ export function summarize(
       typeof conversation.preview === "string" && conversation.preview.trim()
         ? conversation.preview.trim()
         : null,
+    // Gateways before assignees leave it out; that is "nobody named".
+    assignee: teamMemberOf(
+      (conversation as { assignee?: unknown }).assignee ?? null,
+    ),
   };
 }
 

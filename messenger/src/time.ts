@@ -66,3 +66,39 @@ export function absoluteTime(
     return new Date(at).toString();
   }
 }
+
+/**
+ * When the team is back, as the two halves `Strings.backAt` joins: the day
+ * ("today", "tomorrow" from Intl's relative format, then a weekday name) and
+ * the local time. Null when `at` is unusable or more than a week out.
+ */
+export function returnParts(
+  at: number | null,
+  now: number,
+  locale: string | undefined,
+): { day: string; time: string } | null {
+  if (at === null || !Number.isFinite(at) || at <= now) return null;
+  const startOf = (value: number) => {
+    const date = new Date(value);
+    date.setHours(0, 0, 0, 0);
+    return date.getTime();
+  };
+  const days = Math.round((startOf(at) - startOf(now)) / DAY);
+  if (days > 7) return null;
+  try {
+    const time = new Intl.DateTimeFormat(locale, {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(at);
+    const day =
+      days <= 1
+        ? new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(
+            days,
+            "day",
+          )
+        : new Intl.DateTimeFormat(locale, { weekday: "long" }).format(at);
+    return { day, time };
+  } catch {
+    return null;
+  }
+}

@@ -37,6 +37,21 @@ const defaultConfig = () => ({
   },
   agentName: "Fern",
   humanName: "Maya Chen",
+  // GET /v1/messenger. `team` names people by their synthetic avatar (null
+  // for initials only); `messengerRoute: false` answers 404, as a gateway
+  // from before the route would.
+  team: [
+    { name: "Maya Chen", avatar: "maya" },
+    { name: "Leo Park", avatar: "leo" },
+    { name: "Sam Ortiz", avatar: null },
+  ],
+  replyTime: {
+    setting: "auto",
+    expectation: "few_minutes",
+    open: true,
+    nextOpenAt: null,
+  },
+  messengerRoute: true,
   tokenLifetimeSeconds: 300,
   autoReply: false,
   autoReplyDelayMs: 1200,
@@ -44,6 +59,18 @@ const defaultConfig = () => ({
 });
 
 const b64url = (buffer) => Buffer.from(buffer).toString("base64url");
+
+// Synthetic "photos": a tinted portrait silhouette per slug, so screenshots
+// show a picture rather than initials. Served by the mock gateway, standing
+// in for the support workspace origin real avatars come from.
+const AVATARS = {
+  maya: ["#c98b6b", "#f3d9c8"],
+  leo: ["#5f7d6e", "#d6e6dc"],
+  sam: ["#7a6fa8", "#e1dcf3"],
+  fern: ["#2f2a24", "#e9e1d4"],
+};
+const avatarSvg = ([ink, paper]) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" fill="${paper}"/><circle cx="48" cy="38" r="17" fill="${ink}"/><path d="M14 96c2-22 16-34 34-34s32 12 34 34Z" fill="${ink}"/></svg>`;
 const sha256 = (text) => createHash("sha256").update(text).digest();
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -117,7 +144,14 @@ export async function startMock({
       unreadForContact: unreadFor(conversation),
       lastSeenAt: conversation.lastSeenAt,
       preview: last?.content ?? null,
+      assignee: conversation.assignee ? person(conversation.assignee) : null,
     };
+  };
+  const avatarUrl = (slug) =>
+    slug && AVATARS[slug] ? `${gatewayUrl}/avatars/${slug}.svg` : null;
+  const person = (name) => {
+    const member = config.team.find((entry) => entry.name === name);
+    return { name, avatarUrl: avatarUrl(member?.avatar ?? null) };
   };
   const wireMessage = (message) => ({
     id: message.id,
@@ -143,10 +177,9 @@ export async function startMock({
           ? { name: senderName ?? "Visitor", avatarUrl: null }
           : author === "system"
             ? null
-            : {
-                name: author === "agent" ? config.agentName : config.humanName,
-                avatarUrl: null,
-              },
+            : author === "agent"
+              ? { name: config.agentName, avatarUrl: null }
+              : person(senderName ?? config.humanName),
       author,
     };
     conversation.messages.push(message);
@@ -207,6 +240,17 @@ export async function startMock({
       }
       const url = new URL(request.url, "http://127.0.0.1");
       const origin = request.headers.origin;
+      const avatarMatch = url.pathname.match(/^\/avatars\/([a-z]+)\.svg$/);
+      if (avatarMatch && request.method === "GET") {
+        const colours = AVATARS[avatarMatch[1]];
+        if (!colours) return send(response, 404, { error: "not_found" });
+        response.writeHead(200, {
+          "content-type": "image/svg+xml",
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+        });
+        return response.end(avatarSvg(colours));
+      }
       if (!url.pathname.startsWith("/__mock/")) {
         requests.push({
           method: request.method,
@@ -288,6 +332,8 @@ export async function startMock({
       return { name: "create", handle: createConversation };
     if (path === "/v1/unread" && method === "GET")
       return { name: "unread", handle: unread };
+    if (path === "/v1/messenger" && method === "GET")
+      return { name: "messenger", handle: messenger };
     let match = path.match(/^\/v1\/conversations\/(\d+)\/messages$/);
     if (match && method === "GET")
       return {
@@ -312,6 +358,25 @@ export async function startMock({
         conversations: list,
         widgetConversationId:
           list.reduce((max, entry) => Math.max(max, entry.id), 0) || null,
+      },
+      headers,
+    );
+  }
+
+  function messenger({ response, headers }) {
+    if (!config.messengerRoute)
+      return send(response, 404, { error: "not_found" }, headers);
+    send(
+      response,
+      200,
+      {
+        data: {
+          team: config.team.slice(0, 3).map((member) => ({
+            name: member.name,
+            avatarUrl: avatarUrl(member.avatar),
+          })),
+          replyTime: config.replyTime,
+        },
       },
       headers,
     );
@@ -549,9 +614,8 @@ export async function startMock({
         const message = addMessage(conversation, {
           author: body.author ?? "agent",
           content: body.content ?? "Happy to help!",
+          senderName: body.author === "human" ? body.senderName : undefined,
         });
-        if (body.author === "human" && body.senderName)
-          message.sender.name = body.senderName;
         return send(response, 200, { message: wireMessage(message) });
       }
       case "/__mock/seed": {
@@ -570,14 +634,13 @@ export async function startMock({
             createdAt: now() - (thread.ageSeconds ?? 0),
             lastSeenAt: null,
             lastSeenMessageId: 0,
+            assignee: thread.assignee ?? null,
             messages: [],
           };
           conversations.set(conversation.id, conversation);
           for (const entry of thread.messages ?? []) {
             const message = addMessage(conversation, entry);
             message.created_at = now() - (entry.ageSeconds ?? 0);
-            if (entry.senderName && message.sender)
-              message.sender.name = entry.senderName;
           }
           if (thread.seen) conversation.lastSeenMessageId = messageSeq;
         }

@@ -25,6 +25,8 @@ export interface MockState {
 export interface SeedThread {
   ageSeconds?: number;
   seen?: boolean;
+  /** A team member's name: the conversation summary's `assignee`. */
+  assignee?: string;
   messages?: {
     author: "customer" | "agent" | "human" | "system";
     content: string;
@@ -46,7 +48,14 @@ export interface Mock {
   configure(body: Record<string, unknown>): Promise<unknown>;
   fail(body: {
     route:
-      "sessions" | "list" | "create" | "unread" | "messages" | "send" | "seen";
+      | "sessions"
+      | "list"
+      | "create"
+      | "unread"
+      | "messages"
+      | "send"
+      | "seen"
+      | "messenger";
     status?: number;
     code?: string;
     times?: number;

@@ -1,6 +1,7 @@
 // Demo pages for the mock site. Every page ships a strict CSP: no inline
 // script except the snippet (allowed by its SHA-256), no inline styles,
-// Trusted Types enforced, and connections only to the mock gateway.
+// Trusted Types enforced, and connections (and teammate photos) only to the
+// mock gateway.
 import { createHash } from "node:crypto";
 
 const THEMES = new Set(["auto", "light", "dark"]);
@@ -31,7 +32,11 @@ document.addEventListener('click',function(e){var t=e.target&&e.target.closest&&
     `script-src 'self' 'sha256-${hash}'`,
     `connect-src ${gatewayUrl}`,
     "style-src 'self'",
-    "img-src 'self'",
+    // Teammate photos come from the support workspace origin (here the mock
+    // gateway); ?photos=0 leaves it out to exercise the initials fallback.
+    query.get("photos") === "0"
+      ? "img-src 'self'"
+      : `img-src 'self' ${gatewayUrl}`,
     "base-uri 'none'",
     "form-action 'none'",
     "frame-ancestors 'none'",
