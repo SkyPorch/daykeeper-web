@@ -98,3 +98,55 @@ export function initials(name: string): string {
     parts.length === 1 ? [parts[0]] : [parts[0], parts[parts.length - 1]];
   return letters.map((part) => initial(part!)).join("");
 }
+
+/**
+ * A person's round avatar: their initials, with their photo laid over them
+ * when there is one. A photo that fails to load (blocked by the host page's
+ * CSP, gone, offline) removes itself and the initials show through. The
+ * photo is requested without a referrer, so the support origin never learns
+ * which page the visitor is on.
+ */
+export function avatar(
+  doc: Document,
+  name: string,
+  url: string | null,
+  className = "",
+): HTMLSpanElement {
+  const span = h(
+    doc,
+    "span",
+    {
+      class: `avatar${className ? ` ${className}` : ""}`,
+      "aria-hidden": "true",
+    },
+    initials(name),
+  );
+  if (url) {
+    const img = h(doc, "img", {
+      alt: "",
+      referrerpolicy: "no-referrer",
+      decoding: "async",
+      draggable: "false",
+    });
+    img.addEventListener("error", () => img.remove(), { once: true });
+    img.src = url;
+    span.append(img);
+  }
+  return span;
+}
+
+/** Up to three overlapping avatars, each tucked under the next. */
+export function avatarStack(
+  doc: Document,
+  team: readonly { name: string; avatarUrl: string | null }[],
+  className = "",
+): HTMLSpanElement {
+  const stack = h(doc, "span", {
+    class: `stack${className ? ` ${className}` : ""}`,
+    "aria-hidden": "true",
+    "data-count": Math.min(team.length, 3),
+  });
+  for (const member of team.slice(0, 3))
+    stack.append(avatar(doc, member.name, member.avatarUrl));
+  return stack;
+}

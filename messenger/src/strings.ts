@@ -11,6 +11,20 @@ export interface Strings {
   close: string;
   back: string;
   defaultGreeting: string;
+  /** The reply-time line under the greeting, by the gateway's expectation. */
+  replyTime: {
+    few_minutes: string;
+    few_hours: string;
+    day: string;
+    asap: string;
+  };
+  /** Outside business hours; `when` comes from `backAt`. */
+  awayBack: (when: string) => string;
+  away: string;
+  /** "today at 9:00 AM": `day` is Intl's relative day or a weekday name. */
+  backAt: (day: string, time: string) => string;
+  /** Accessible name of the avatar stack: "Maya, Leo and Sam". */
+  teamLabel: (names: string[]) => string;
   startTitle: string;
   startBody: string;
   newConversation: string;
@@ -57,6 +71,19 @@ export const en: Strings = {
   close: "Close",
   back: "Back to conversations",
   defaultGreeting: "Hi there. How can we help?",
+  replyTime: {
+    few_minutes: "We typically reply in a few minutes",
+    few_hours: "We typically reply in a few hours",
+    day: "We typically reply in a day",
+    asap: "We'll reply as soon as we can",
+  },
+  awayBack: (when) => `We're away right now. Back ${when}.`,
+  away: "We're away right now. We'll reply as soon as we can.",
+  backAt: (day, time) => `${day} at ${time}`,
+  teamLabel: (names) =>
+    names.length <= 1
+      ? (names[0] ?? "")
+      : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`,
   startTitle: "Send us a message",
   startBody: "Ask a question or tell us what's going on. We'll reply here.",
   newConversation: "New conversation",

@@ -9,8 +9,9 @@ import {
 } from "./fixtures.ts";
 
 // Review screenshots: desktop + 390 px mobile, light + dark, for the closed
-// launcher with an unread badge, home, a thread with AI-agent and human
-// replies, and an error state. SCREENSHOT_DIR overrides the output folder.
+// launcher with an unread badge, home (team avatars, reply time, a row with
+// its assignee), a thread with AI-agent and human replies, an error state,
+// and home outside business hours. SCREENSHOT_DIR overrides the output folder.
 const OUT =
   process.env.SCREENSHOT_DIR ??
   join(process.cwd(), "test-results", "screenshots");
@@ -54,6 +55,7 @@ for (const [device, viewport] of Object.entries(sizes)) {
             },
             {
               ageSeconds: 600,
+              assignee: "Maya Chen",
               messages: [
                 {
                   author: "customer",
@@ -121,6 +123,30 @@ for (const [device, viewport] of Object.entries(sizes)) {
         await m.textarea.fill("Perfect, thank you both!");
         await page.screenshot({
           path: join(OUT, `${device}-${scheme}-4-composing.png`),
+        });
+      });
+
+      test("home, away", async ({ page, mock }) => {
+        await page.addInitScript(openShadowRoots);
+        // Back tomorrow at 9:00 in the visitor's own time zone.
+        const back = new Date();
+        back.setDate(back.getDate() + 1);
+        back.setHours(9, 0, 0, 0);
+        await mock.configure({
+          replyTime: {
+            setting: "auto",
+            expectation: "few_hours",
+            open: false,
+            nextOpenAt: back.toISOString(),
+          },
+        });
+        const m = messenger(page);
+        await page.goto(`${mock.siteUrl}/`);
+        await m.launcher.click();
+        await expect(m.host.locator(".hero-reply")).toContainText("Back");
+        await page.waitForTimeout(400);
+        await page.screenshot({
+          path: join(OUT, `${device}-${scheme}-6-home-away.png`),
         });
       });
 

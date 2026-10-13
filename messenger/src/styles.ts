@@ -370,6 +370,85 @@ export const css = String.raw`
   padding-top: 0;
 }
 
+/* A person: initials under their photo, which covers them once it loads. */
+.avatar {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1;
+  user-select: none;
+}
+
+.avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.avatar.small,
+.small > .avatar {
+  width: 28px;
+  height: 28px;
+  font-size: 11px;
+}
+
+.stack {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.stack > .avatar {
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+.stack > .avatar + .avatar {
+  margin-inline-start: -9px;
+}
+
+.stack.small > .avatar + .avatar {
+  margin-inline-start: -8px;
+}
+
+.hero-stack > .avatar {
+  width: 44px;
+  height: 44px;
+  font-size: 14px;
+  box-shadow: 0 0 0 3px var(--bg);
+}
+
+.hero-stack > .avatar + .avatar {
+  margin-inline-start: -12px;
+}
+
+.stack.large > .avatar {
+  width: 52px;
+  height: 52px;
+  font-size: 16px;
+  box-shadow: 0 0 0 3px var(--bg);
+}
+
+.stack.large > .avatar + .avatar {
+  margin-inline-start: -14px;
+}
+
+.stack-slot {
+  display: inline-flex;
+  flex: none;
+}
+
 .body {
   flex: 1;
   min-height: 0;
@@ -403,6 +482,17 @@ export const css = String.raw`
   color: var(--text);
   overflow-wrap: anywhere;
   white-space: pre-line;
+}
+
+.hero-team {
+  display: flex;
+  margin-bottom: 16px;
+}
+
+.hero-reply {
+  margin: 12px 0 0;
+  font-size: 14.5px;
+  color: var(--muted);
 }
 
 .hero-title.long {
@@ -569,6 +659,23 @@ export const css = String.raw`
   margin: 8px 0 0;
   font-size: 16px;
   font-weight: 700;
+}
+
+.intro-avatar {
+  display: flex;
+  justify-content: center;
+}
+
+.intro-reply {
+  margin: 2px 0 0;
+  max-width: 300px;
+  color: var(--faint);
+  font-size: 13px;
+}
+
+.row-avatar {
+  display: inline-flex;
+  flex: none;
 }
 
 .intro-greeting {

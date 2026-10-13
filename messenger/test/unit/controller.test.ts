@@ -16,6 +16,7 @@ import {
   type ThreadMessage,
 } from "../../src/controller.ts";
 import { MessengerError } from "../../src/errors.ts";
+import { EMPTY_PROFILE, type MessengerProfile } from "../../src/profile.ts";
 import type { SessionGrant, VisitorSession } from "../../src/session.ts";
 import { createVisitorStore } from "../../src/storage.ts";
 
@@ -160,6 +161,14 @@ function setup(options: { stored?: boolean; hasConversation?: boolean } = {}) {
   } as unknown as VisitorSession;
 
   const calls: { method: Method; args: unknown[] }[] = [];
+  const profileCalls: { gatewayUrl: string; token: string }[] = [];
+  let profileFailure: unknown = null;
+  let profile: MessengerProfile = {
+    team: [
+      { name: "Maya Chen", avatarUrl: "https://support.example.test/a.png" },
+    ],
+    replyTime: { expectation: "few_minutes", open: true, nextOpenAt: null },
+  };
   const handlers: Partial<Record<Method, (...args: any[]) => unknown>> = {};
   const serverMessages: ReturnType<typeof message>[] = [];
   const defaults: Record<Method, (...args: any[]) => unknown> = {
@@ -205,6 +214,11 @@ function setup(options: { stored?: boolean; hasConversation?: boolean } = {}) {
     timers: clock.timers,
     isVisible: () => visible,
     createClient: () => client,
+    fetchProfile: async (gatewayUrl: string, token: string) => {
+      profileCalls.push({ gatewayUrl, token });
+      if (profileFailure) throw profileFailure;
+      return profile;
+    },
   });
   const events: ControllerEvent[] = [];
   controller.on((event) => events.push(event));
@@ -223,6 +237,13 @@ function setup(options: { stored?: boolean; hasConversation?: boolean } = {}) {
     },
     failSession(error: unknown) {
       sessionFailure = error;
+    },
+    profileCalls,
+    setProfile(value: MessengerProfile) {
+      profile = value;
+    },
+    failProfile(error: unknown) {
+      profileFailure = error;
     },
     count: (method: Method) => calls.filter((c) => c.method === method).length,
   };
@@ -623,6 +644,7 @@ test("mergeServerMessages dedupes, orders, and settles unconfirmed sends", () =>
     id: null,
     author: "customer",
     senderName: null,
+    senderAvatarUrl: null,
     content,
     createdAt: null,
     status,
@@ -632,6 +654,7 @@ test("mergeServerMessages dedupes, orders, and settles unconfirmed sends", () =>
     id,
     author: "customer",
     senderName: null,
+    senderAvatarUrl: null,
     content,
     createdAt: null,
     status: "sent",
@@ -652,4 +675,87 @@ test("mergeServerMessages dedupes, orders, and settles unconfirmed sends", () =>
     settleUnconfirmed(settleUnconfirmed([pending("p:9", "x", "unconfirmed")])),
   );
   assert.equal(settled[0]!.status, "failed");
+});
+
+// ---- team and reply time ------------------------------------------------
+
+test("the team and reply time load once the panel opens, never while closed", async () => {
+  const t = setup({ hasConversation: true });
+  t.controller.start();
+  await t.clock.advance(5 * 60_000);
+  assert.ok(t.count("getUnread") > 0);
+  assert.equal(t.profileCalls.length, 0, "closed polling never asks");
+  assert.deepEqual(t.controller.state.profile, EMPTY_PROFILE);
+
+  t.controller.open();
+  await t.clock.flush();
+  assert.deepEqual(t.profileCalls, [
+    { gatewayUrl: "https://gateway.example.test", token: "tok" },
+  ]);
+  assert.equal(t.controller.state.profile.team[0]?.name, "Maya Chen");
+  assert.equal(
+    t.controller.state.profile.replyTime?.expectation,
+    "few_minutes",
+  );
+
+  // Home polls every 30 s; the profile is asked for again only after 5 min.
+  await t.clock.advance(4 * 60_000);
+  assert.equal(t.profileCalls.length, 1);
+  t.setProfile({ team: [], replyTime: null });
+  await t.clock.advance(60_000 + POLL.homeVisible);
+  assert.equal(t.profileCalls.length, 2);
+  assert.deepEqual(t.controller.state.profile.team, []);
+});
+
+test("a failing profile is decoration only: no error state, retried later", async () => {
+  const t = setup();
+  t.failProfile(new Error("boom"));
+  t.controller.open();
+  await t.clock.flush();
+  assert.equal(t.controller.state.phase, "ready");
+  assert.equal(t.controller.state.error, null);
+  assert.deepEqual(t.controller.state.profile, EMPTY_PROFILE);
+  await t.clock.advance(POLL.homeVisible);
+  assert.equal(t.profileCalls.length, 1, "no retry storm");
+});
+
+test("list rows carry the assignee and human replies their photo", async () => {
+  const t = setup();
+  t.handlers.listConversations = () => ({
+    conversations: [
+      conversation(7, {
+        assignee: {
+          name: " Maya Chen ",
+          avatarUrl: "https://support.example.test/maya.png",
+        },
+      } as Partial<DaykeeperConversation>),
+      conversation(8, {
+        assignee: { name: "", avatarUrl: null },
+      } as Partial<DaykeeperConversation>),
+      conversation(9),
+    ],
+    widgetConversationId: 9,
+  });
+  t.controller.open();
+  await t.clock.flush();
+  assert.deepEqual(
+    t.controller.state.conversations.map((entry) => entry.assignee),
+    [
+      { name: "Maya Chen", avatarUrl: "https://support.example.test/maya.png" },
+      null,
+      null,
+    ],
+  );
+  const reply = message(10, "human");
+  reply.sender = {
+    name: "Maya Chen",
+    avatarUrl: "https://support.example.test/maya.png",
+  };
+  t.serverMessages.push(reply, message(11, "agent"));
+  t.controller.openConversation(7);
+  await t.clock.flush();
+  assert.deepEqual(
+    t.controller.state.thread.map((entry) => entry.senderAvatarUrl),
+    ["https://support.example.test/maya.png", null],
+  );
 });

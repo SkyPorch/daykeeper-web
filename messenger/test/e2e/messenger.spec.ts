@@ -431,6 +431,131 @@ test.describe("unread, storage, session", () => {
   });
 });
 
+test.describe("team and reply time", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(openShadowRoots);
+  });
+
+  test("home shows the team, the reply time, and who is on each thread", async ({
+    page,
+    mock,
+  }) => {
+    const seeded = await mock.seed({
+      conversations: [
+        {
+          assignee: "Maya Chen",
+          seen: true,
+          messages: [
+            { author: "customer", content: "Do you ship to Canada?" },
+            {
+              author: "human",
+              senderName: "Maya Chen",
+              content: "We do, in 5 to 8 business days.",
+            },
+          ],
+        },
+      ],
+    });
+    await storeVisitor(page, mock.publishableKey, seeded);
+    const m = messenger(page);
+    await page.goto(`${mock.siteUrl}/`);
+    await m.launcher.click();
+    const hero = m.host.locator(".hero-team .avatar");
+    await expect(hero).toHaveCount(3);
+    // Two photos load from the support origin; the third person has none.
+    await expect(m.host.locator(".hero-team img")).toHaveCount(2);
+    for (const img of await m.host.locator(".hero-team img").all()) {
+      await expect(img).toHaveAttribute("referrerpolicy", "no-referrer");
+      await expect
+        .poll(() =>
+          img.evaluate((node) => (node as HTMLImageElement).naturalWidth),
+        )
+        .toBeGreaterThan(0);
+    }
+    await expect(hero.nth(2)).toHaveText("SO");
+    await expect(m.host.locator(".hero-team")).toHaveAttribute(
+      "title",
+      "Maya Chen, Leo Park and Sam Ortiz",
+    );
+    await expect(m.host.locator(".hero-reply")).toHaveText(
+      "We typically reply in a few minutes",
+    );
+    // On home the topbar shows the name only; the stack lives in the hero.
+    await expect(m.host.locator(".topbar .stack-slot")).toBeHidden();
+    await expect(m.host.locator(".topbar .monogram")).toBeHidden();
+    // The row names the person handling it, with their photo.
+    await expect(m.host.locator(".row-meta")).toContainText("Maya Chen");
+    await expect(m.host.locator(".row .row-avatar img")).toHaveCount(1);
+
+    await m.host.locator(".row").click();
+    await expect(m.messages.locator(".msg")).toHaveCount(2);
+    await expect(m.host.locator(".topbar .stack-slot")).toBeVisible();
+    await expect(m.host.locator(".topbar .stack-slot .avatar")).toHaveCount(3);
+    await expect(m.host.locator(".intro-reply")).toHaveText(
+      "We typically reply in a few minutes",
+    );
+    const author = m.messages.locator(".msg").nth(1).locator(".author");
+    await expect(author.locator(".author-name")).toHaveText("Maya Chen");
+    await expect(author.locator(".avatar img")).toHaveCount(1);
+    // Asked for once, after the session, with the visitor's token.
+    const asks = (await mock.state()).requests.filter(
+      (r) => r.method === "GET" && r.path === "/v1/messenger",
+    );
+    expect(asks).toHaveLength(1);
+  });
+
+  test("outside business hours it says when the team is back", async ({
+    page,
+    mock,
+  }) => {
+    const back = new Date();
+    back.setDate(back.getDate() + 1);
+    back.setHours(9, 0, 0, 0);
+    await mock.configure({
+      replyTime: {
+        setting: "in_a_few_hours",
+        expectation: "few_hours",
+        open: false,
+        nextOpenAt: back.toISOString(),
+      },
+    });
+    const m = messenger(page);
+    await page.goto(`${mock.siteUrl}/`);
+    await m.launcher.click();
+    await expect(m.host.locator(".hero-reply")).toHaveText(
+      /^We're away right now\. Back tomorrow at 9:00\sAM\.$/,
+    );
+  });
+
+  test("an older gateway without the route keeps the monogram and no line", async ({
+    page,
+    mock,
+  }) => {
+    await mock.configure({ messengerRoute: false });
+    const m = messenger(page);
+    await page.goto(`${mock.siteUrl}/`);
+    await m.launcher.click();
+    await expect(m.host.locator(".hero-title")).toBeVisible();
+    await waitForRequest(mock, (r) => r.path === "/v1/messenger");
+    await expect(m.host.locator(".hero-team")).toBeHidden();
+    await expect(m.host.locator(".hero-reply")).toBeHidden();
+    await expect(m.host.locator(".topbar .monogram")).toBeVisible();
+    await expect(m.host.locator(".state")).toHaveCount(0);
+  });
+
+  test("a photo the page's CSP blocks falls back to initials", async ({
+    page,
+    mock,
+  }) => {
+    const m = messenger(page);
+    await page.goto(`${mock.siteUrl}/?photos=0`);
+    await m.launcher.click();
+    await expect(m.host.locator(".hero-team .avatar")).toHaveCount(3);
+    await expect(m.host.locator(".hero-team img")).toHaveCount(0);
+    await expect(m.host.locator(".hero-team .avatar").first()).toHaveText("MC");
+  });
+});
+
 test.describe("error states", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(openShadowRoots);
