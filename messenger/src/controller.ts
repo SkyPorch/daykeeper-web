@@ -190,6 +190,8 @@ export class MessengerController {
   #threadToken = 0;
   #profileAt = -Infinity;
   #profileLoading = false;
+  /** Fires when an away team is due back; see #armReturn. */
+  #returnTimer: unknown = null;
   /**
    * The gateway reflects CORS only after it verified the token, so an
    * expired or rejected token reaches us as an opaque network failure, not a
@@ -228,6 +230,7 @@ export class MessengerController {
   shutdown(): void {
     this.#stopped = true;
     this.#clearTimer();
+    this.#clearReturn();
     this.#listeners.clear();
     this.#env.session.reset();
   }
@@ -556,13 +559,50 @@ export class MessengerController {
         token,
         this.#env.deviceContext(),
       );
-      if (!this.#stopped) this.#set({ profile });
+      if (!this.#stopped) {
+        this.#set({ profile });
+        this.#armReturn();
+      }
     } catch {
       /* decoration only */
     } finally {
       this.#profileAt = this.#env.now();
       this.#profileLoading = false;
     }
+  }
+
+  /**
+   * "We're away. Back tomorrow at 9:00" must not outlive 9:00. Nothing else
+   * re-renders an idle panel (a new conversation polls nothing), so at the
+   * return time the team is shown as open at once and the profile is asked
+   * for again for the real answer.
+   */
+  #armReturn(): void {
+    this.#clearReturn();
+    const reply = this.state.profile.replyTime;
+    if (!reply || reply.open || reply.nextOpenAt === null) return;
+    const delay = Math.max(0, reply.nextOpenAt - this.#env.now());
+    // setTimeout overflows past ~24.8 days; the gateway never says more than a week.
+    if (delay > 2_147_483_647) return;
+    this.#returnTimer = this.#env.timers.setTimeout(() => {
+      this.#returnTimer = null;
+      const current = this.state.profile.replyTime;
+      if (this.#stopped || !current || current.open) return;
+      this.#set({
+        profile: {
+          ...this.state.profile,
+          replyTime: { ...current, open: true, nextOpenAt: null },
+        },
+      });
+      this.#profileAt = -Infinity;
+      if (this.state.open) void this.#loadProfile();
+    }, delay);
+  }
+
+  #clearReturn(): void {
+    if (this.#returnTimer !== null)
+      this.#env.timers.clearTimeout(this.#returnTimer);
+    this.#returnTimer = null;
   }
 
   async #pollUnread(client: Client): Promise<void> {

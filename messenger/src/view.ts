@@ -607,6 +607,8 @@ export class MessengerView {
         "aria-label",
         [
           entry.preview ?? this.#t.conversationFallbackPreview,
+          // Who is handling it, as the visible row says.
+          label,
           when,
           entry.unread > 0 ? this.#t.unreadCount(entry.unread) : "",
         ]
@@ -953,7 +955,7 @@ export class MessengerView {
     const reply = s.profile.replyTime;
     if (!reply) return null;
     const t = this.#t;
-    if (reply.open) return t.replyTime[reply.expectation];
+    if (!isAway(reply)) return t.replyTime[reply.expectation];
     const parts = returnParts(reply.nextOpenAt, Date.now(), this.#o.locale);
     return parts ? t.awayBack(t.backAt(parts.day, parts.time)) : t.away;
   }
@@ -962,7 +964,8 @@ export class MessengerView {
     const text = this.#replyLine(s);
     line.hidden = text === null;
     if (text !== null && line.textContent !== text) line.textContent = text;
-    line.classList.toggle("away", s.profile.replyTime?.open === false);
+    const reply = s.profile.replyTime;
+    line.classList.toggle("away", reply !== null && isAway(reply));
   }
 
   #nameFor(message: ThreadMessage): string {
@@ -1205,4 +1208,14 @@ function sameGroup(a: ThreadMessage, b: ThreadMessage): boolean {
   )
     return false;
   return true;
+}
+
+/**
+ * Away until the return time, never after it: a reply time whose
+ * `nextOpenAt` has passed reads as open even before the profile is reloaded.
+ */
+function isAway(reply: { open: boolean; nextOpenAt: number | null }): boolean {
+  return (
+    !reply.open && (reply.nextOpenAt === null || reply.nextOpenAt > Date.now())
+  );
 }

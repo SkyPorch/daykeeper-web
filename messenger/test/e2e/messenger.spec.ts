@@ -486,6 +486,11 @@ test.describe("team and reply time", () => {
     // The row names the person handling it, with their photo.
     await expect(m.host.locator(".row-meta")).toContainText("Maya Chen");
     await expect(m.host.locator(".row .row-avatar img")).toHaveCount(1);
+    // A screen reader hears who is handling it too, not just the preview.
+    await expect(m.host.locator(".row")).toHaveAttribute(
+      "aria-label",
+      /^We do, in 5 to 8 business days\., Maya Chen, /,
+    );
 
     await m.host.locator(".row").click();
     await expect(m.messages.locator(".msg")).toHaveCount(2);

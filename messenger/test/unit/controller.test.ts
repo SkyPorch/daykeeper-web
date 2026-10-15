@@ -707,6 +707,50 @@ test("the team and reply time load once the panel opens, never while closed", as
   assert.deepEqual(t.controller.state.profile.team, []);
 });
 
+test("an away team reads as back at its return time, then the profile is asked again", async () => {
+  const t = setup();
+  const back = t.clock.now + 2 * 3_600_000;
+  t.setProfile({
+    team: [],
+    replyTime: { expectation: "few_minutes", open: false, nextOpenAt: back },
+  });
+  t.controller.open();
+  await t.clock.flush();
+  assert.equal(t.controller.state.profile.replyTime?.open, false);
+  assert.equal(t.profileCalls.length, 1);
+
+  // Just before: still away, and nothing asked early.
+  await t.clock.advance(2 * 3_600_000 - 1);
+  assert.equal(t.controller.state.profile.replyTime?.open, false);
+  const before = t.profileCalls.length;
+
+  // At the return time the line flips at once, and the server is asked.
+  t.setProfile({
+    team: [],
+    replyTime: { expectation: "few_hours", open: true, nextOpenAt: null },
+  });
+  await t.clock.advance(1);
+  assert.equal(t.controller.state.profile.replyTime?.open, true);
+  assert.equal(t.profileCalls.length, before + 1);
+  assert.equal(t.controller.state.profile.replyTime?.expectation, "few_hours");
+
+  // Shut down before a return time: the timer never fires.
+  const later = setup();
+  later.setProfile({
+    team: [],
+    replyTime: {
+      expectation: "few_minutes",
+      open: false,
+      nextOpenAt: later.clock.now + 60_000,
+    },
+  });
+  later.controller.open();
+  await later.clock.flush();
+  later.controller.shutdown();
+  await later.clock.advance(120_000);
+  assert.equal(later.controller.state.profile.replyTime?.open, false);
+});
+
 test("a failing profile is decoration only: no error state, retried later", async () => {
   const t = setup();
   t.failProfile(new Error("boom"));
