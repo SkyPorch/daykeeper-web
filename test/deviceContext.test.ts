@@ -258,6 +258,16 @@ const userAgents: [string, string, number, Record<string, string>][] = [
     },
   ],
   [
+    "Android WebView with the reduced UA (frozen version left out)",
+    "Mozilla/5.0 (Linux; Android 10; K; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/129.0.0.0 Mobile Safari/537.36",
+    5,
+    {
+      osName: "Android",
+      browserName: "Android WebView",
+      browserVersion: "129",
+    },
+  ],
+  [
     "an old Android stock browser (not Safari)",
     "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; SM-T230) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30",
     5,

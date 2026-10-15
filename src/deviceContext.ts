@@ -86,7 +86,8 @@ export function parseUserAgent(
     if (version) facts.osVersion = version.replace(/_/g, ".");
   } else if ((match = userAgent.match(/\bAndroid(?: (\d+(?:\.\d+)*))?/))) {
     facts.osName = "Android";
-    const reduced = /\bAndroid 10; K\)/.test(userAgent);
+    // Reduced Chrome says "Android 10; K)"; a reduced WebView adds "; wv".
+    const reduced = /\bAndroid 10; K(?:; wv)?\)/.test(userAgent);
     if (match[1] && !reduced) facts.osVersion = match[1];
   } else if (/\bCrOS\b/.test(userAgent)) {
     facts.osName = "ChromeOS";
