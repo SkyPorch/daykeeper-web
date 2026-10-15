@@ -2,11 +2,13 @@
 
 `customer.yaml` is an exact copy of `openapi/customer.yaml` from
 `SkyPorch/daykeeper-openapi`, commit
-`c9a0175d0053f1a2d57c9329f6d3a36ec6acdb71` (immutable `v1.1.0` release tag).
+`4683bfa2eef41c0948a4ea1507ceb4c8e95f1bff` (immutable `v1.11.0` release tag).
 
-- SHA-256: `322158cd5fa5c54a054d701ff64a9c8b07cad477414d7df83ba5a3aa7ee06cc3`
-- Source Git blob: `bf566c97a541ac5e4e1f04670fb3b65475b635a6`
-- Tag status: v1.1.0 (immutable release tag).
+- SHA-256: `bc77cb02b877856d2b52ce948fcda4b3b357a7885cd5f5405c3b6394d3b96251`
+- Source Git blob: `dc1ac7a6d3191e28f296996729c9744c6b92efbb`
+- Tag status: v1.11.0 (immutable release tag).
+- Customer contract `info.version`: 0.2.0, which adds the optional
+  `Daykeeper-Client` header on every customer-session operation.
 
 The released baseline is tag `v1.0.0`, commit
 `35f5bd45fe0c6a6901766543bff90dae6838b965`. Provider-neutral wording came from
