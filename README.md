@@ -13,7 +13,7 @@ folder of this repository, is served from the Daykeeper CDN and is not part of
 this npm package. The console's "Add chat to your app" step gives you its
 install snippet.
 
-Version `0.2.0` is the first approved public release candidate. Publication is
+Version `0.3.0` is the current release. Publication is
 performed only by the protected release workflow after the gates in
 [RELEASING.md](RELEASING.md) are satisfied.
 
@@ -24,7 +24,7 @@ pnpm install --frozen-lockfile
 pnpm check
 npm pack
 # In a separate application, install the reviewed local .tgz file.
-npm install /path/to/skyporch-daykeeper-web-0.2.0.tgz
+npm install /path/to/skyporch-daykeeper-web-0.3.0.tgz
 ```
 
 The package has no runtime dependencies. It ships ESM, CommonJS, and TypeScript

@@ -7,7 +7,21 @@ export interface paths {
     "/v1/identity": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description What the calling SDK knows about the device it runs on: base64url
+                 *     (no padding) of a UTF-8 JSON object. Daykeeper SDKs send it by default
+                 *     so agents see the app, device and OS on the contact without host code.
+                 *     It is presentation context, never authorization: a value the host
+                 *     backend signed into the customer token wins field by field, and the
+                 *     gateway drops any field that fails its check (and ignores the whole
+                 *     header when it is longer than 4096 characters or not an object),
+                 *     without failing the request. Contacts are updated when they are
+                 *     resolved to list, create or claim conversations; unread and seen
+                 *     polling never write it.
+                 */
+                "Daykeeper-Client"?: components["parameters"]["DaykeeperClient"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -29,7 +43,21 @@ export interface paths {
     "/v1/conversations": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description What the calling SDK knows about the device it runs on: base64url
+                 *     (no padding) of a UTF-8 JSON object. Daykeeper SDKs send it by default
+                 *     so agents see the app, device and OS on the contact without host code.
+                 *     It is presentation context, never authorization: a value the host
+                 *     backend signed into the customer token wins field by field, and the
+                 *     gateway drops any field that fails its check (and ignores the whole
+                 *     header when it is longer than 4096 characters or not an object),
+                 *     without failing the request. Contacts are updated when they are
+                 *     resolved to list, create or claim conversations; unread and seen
+                 *     polling never write it.
+                 */
+                "Daykeeper-Client"?: components["parameters"]["DaykeeperClient"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -47,7 +75,21 @@ export interface paths {
     "/v1/unread": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description What the calling SDK knows about the device it runs on: base64url
+                 *     (no padding) of a UTF-8 JSON object. Daykeeper SDKs send it by default
+                 *     so agents see the app, device and OS on the contact without host code.
+                 *     It is presentation context, never authorization: a value the host
+                 *     backend signed into the customer token wins field by field, and the
+                 *     gateway drops any field that fails its check (and ignores the whole
+                 *     header when it is longer than 4096 characters or not an object),
+                 *     without failing the request. Contacts are updated when they are
+                 *     resolved to list, create or claim conversations; unread and seen
+                 *     polling never write it.
+                 */
+                "Daykeeper-Client"?: components["parameters"]["DaykeeperClient"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -67,7 +109,21 @@ export interface paths {
     "/v1/conversations/{conversationId}/seen": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description What the calling SDK knows about the device it runs on: base64url
+                 *     (no padding) of a UTF-8 JSON object. Daykeeper SDKs send it by default
+                 *     so agents see the app, device and OS on the contact without host code.
+                 *     It is presentation context, never authorization: a value the host
+                 *     backend signed into the customer token wins field by field, and the
+                 *     gateway drops any field that fails its check (and ignores the whole
+                 *     header when it is longer than 4096 characters or not an object),
+                 *     without failing the request. Contacts are updated when they are
+                 *     resolved to list, create or claim conversations; unread and seen
+                 *     polling never write it.
+                 */
+                "Daykeeper-Client"?: components["parameters"]["DaykeeperClient"];
+            };
             path: {
                 conversationId: components["parameters"]["ConversationId"];
             };
@@ -86,7 +142,21 @@ export interface paths {
     "/v1/conversations/{conversationId}/messages": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description What the calling SDK knows about the device it runs on: base64url
+                 *     (no padding) of a UTF-8 JSON object. Daykeeper SDKs send it by default
+                 *     so agents see the app, device and OS on the contact without host code.
+                 *     It is presentation context, never authorization: a value the host
+                 *     backend signed into the customer token wins field by field, and the
+                 *     gateway drops any field that fails its check (and ignores the whole
+                 *     header when it is longer than 4096 characters or not an object),
+                 *     without failing the request. Contacts are updated when they are
+                 *     resolved to list, create or claim conversations; unread and seen
+                 *     polling never write it.
+                 */
+                "Daykeeper-Client"?: components["parameters"]["DaykeeperClient"];
+            };
             path: {
                 conversationId: components["parameters"]["ConversationId"];
             };
@@ -109,7 +179,21 @@ export interface paths {
     "/v1/anonymous-conversations/claim": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description What the calling SDK knows about the device it runs on: base64url
+                 *     (no padding) of a UTF-8 JSON object. Daykeeper SDKs send it by default
+                 *     so agents see the app, device and OS on the contact without host code.
+                 *     It is presentation context, never authorization: a value the host
+                 *     backend signed into the customer token wins field by field, and the
+                 *     gateway drops any field that fails its check (and ignores the whole
+                 *     header when it is longer than 4096 characters or not an object),
+                 *     without failing the request. Contacts are updated when they are
+                 *     resolved to list, create or claim conversations; unread and seen
+                 *     polling never write it.
+                 */
+                "Daykeeper-Client"?: components["parameters"]["DaykeeperClient"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -356,6 +440,19 @@ export interface components {
         };
     };
     parameters: {
+        /**
+         * @description What the calling SDK knows about the device it runs on: base64url
+         *     (no padding) of a UTF-8 JSON object. Daykeeper SDKs send it by default
+         *     so agents see the app, device and OS on the contact without host code.
+         *     It is presentation context, never authorization: a value the host
+         *     backend signed into the customer token wins field by field, and the
+         *     gateway drops any field that fails its check (and ignores the whole
+         *     header when it is longer than 4096 characters or not an object),
+         *     without failing the request. Contacts are updated when they are
+         *     resolved to list, create or claim conversations; unread and seen
+         *     polling never write it.
+         */
+        DaykeeperClient: string;
         ConversationId: number;
     };
     requestBodies: never;
@@ -367,7 +464,21 @@ export interface operations {
     getCustomerIdentity: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description What the calling SDK knows about the device it runs on: base64url
+                 *     (no padding) of a UTF-8 JSON object. Daykeeper SDKs send it by default
+                 *     so agents see the app, device and OS on the contact without host code.
+                 *     It is presentation context, never authorization: a value the host
+                 *     backend signed into the customer token wins field by field, and the
+                 *     gateway drops any field that fails its check (and ignores the whole
+                 *     header when it is longer than 4096 characters or not an object),
+                 *     without failing the request. Contacts are updated when they are
+                 *     resolved to list, create or claim conversations; unread and seen
+                 *     polling never write it.
+                 */
+                "Daykeeper-Client"?: components["parameters"]["DaykeeperClient"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -390,7 +501,21 @@ export interface operations {
     listCustomerConversations: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description What the calling SDK knows about the device it runs on: base64url
+                 *     (no padding) of a UTF-8 JSON object. Daykeeper SDKs send it by default
+                 *     so agents see the app, device and OS on the contact without host code.
+                 *     It is presentation context, never authorization: a value the host
+                 *     backend signed into the customer token wins field by field, and the
+                 *     gateway drops any field that fails its check (and ignores the whole
+                 *     header when it is longer than 4096 characters or not an object),
+                 *     without failing the request. Contacts are updated when they are
+                 *     resolved to list, create or claim conversations; unread and seen
+                 *     polling never write it.
+                 */
+                "Daykeeper-Client"?: components["parameters"]["DaykeeperClient"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -412,7 +537,21 @@ export interface operations {
     createCustomerConversation: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description What the calling SDK knows about the device it runs on: base64url
+                 *     (no padding) of a UTF-8 JSON object. Daykeeper SDKs send it by default
+                 *     so agents see the app, device and OS on the contact without host code.
+                 *     It is presentation context, never authorization: a value the host
+                 *     backend signed into the customer token wins field by field, and the
+                 *     gateway drops any field that fails its check (and ignores the whole
+                 *     header when it is longer than 4096 characters or not an object),
+                 *     without failing the request. Contacts are updated when they are
+                 *     resolved to list, create or claim conversations; unread and seen
+                 *     polling never write it.
+                 */
+                "Daykeeper-Client"?: components["parameters"]["DaykeeperClient"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -434,7 +573,21 @@ export interface operations {
     getCustomerUnread: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description What the calling SDK knows about the device it runs on: base64url
+                 *     (no padding) of a UTF-8 JSON object. Daykeeper SDKs send it by default
+                 *     so agents see the app, device and OS on the contact without host code.
+                 *     It is presentation context, never authorization: a value the host
+                 *     backend signed into the customer token wins field by field, and the
+                 *     gateway drops any field that fails its check (and ignores the whole
+                 *     header when it is longer than 4096 characters or not an object),
+                 *     without failing the request. Contacts are updated when they are
+                 *     resolved to list, create or claim conversations; unread and seen
+                 *     polling never write it.
+                 */
+                "Daykeeper-Client"?: components["parameters"]["DaykeeperClient"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -456,7 +609,21 @@ export interface operations {
     markCustomerConversationSeen: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description What the calling SDK knows about the device it runs on: base64url
+                 *     (no padding) of a UTF-8 JSON object. Daykeeper SDKs send it by default
+                 *     so agents see the app, device and OS on the contact without host code.
+                 *     It is presentation context, never authorization: a value the host
+                 *     backend signed into the customer token wins field by field, and the
+                 *     gateway drops any field that fails its check (and ignores the whole
+                 *     header when it is longer than 4096 characters or not an object),
+                 *     without failing the request. Contacts are updated when they are
+                 *     resolved to list, create or claim conversations; unread and seen
+                 *     polling never write it.
+                 */
+                "Daykeeper-Client"?: components["parameters"]["DaykeeperClient"];
+            };
             path: {
                 conversationId: components["parameters"]["ConversationId"];
             };
@@ -483,7 +650,21 @@ export interface operations {
                 /** @description Return messages with a larger monotonic identifier. */
                 after?: number;
             };
-            header?: never;
+            header?: {
+                /**
+                 * @description What the calling SDK knows about the device it runs on: base64url
+                 *     (no padding) of a UTF-8 JSON object. Daykeeper SDKs send it by default
+                 *     so agents see the app, device and OS on the contact without host code.
+                 *     It is presentation context, never authorization: a value the host
+                 *     backend signed into the customer token wins field by field, and the
+                 *     gateway drops any field that fails its check (and ignores the whole
+                 *     header when it is longer than 4096 characters or not an object),
+                 *     without failing the request. Contacts are updated when they are
+                 *     resolved to list, create or claim conversations; unread and seen
+                 *     polling never write it.
+                 */
+                "Daykeeper-Client"?: components["parameters"]["DaykeeperClient"];
+            };
             path: {
                 conversationId: components["parameters"]["ConversationId"];
             };
@@ -507,7 +688,21 @@ export interface operations {
     sendCustomerMessage: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description What the calling SDK knows about the device it runs on: base64url
+                 *     (no padding) of a UTF-8 JSON object. Daykeeper SDKs send it by default
+                 *     so agents see the app, device and OS on the contact without host code.
+                 *     It is presentation context, never authorization: a value the host
+                 *     backend signed into the customer token wins field by field, and the
+                 *     gateway drops any field that fails its check (and ignores the whole
+                 *     header when it is longer than 4096 characters or not an object),
+                 *     without failing the request. Contacts are updated when they are
+                 *     resolved to list, create or claim conversations; unread and seen
+                 *     polling never write it.
+                 */
+                "Daykeeper-Client"?: components["parameters"]["DaykeeperClient"];
+            };
             path: {
                 conversationId: components["parameters"]["ConversationId"];
             };
@@ -535,7 +730,21 @@ export interface operations {
     claimAnonymousConversation: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description What the calling SDK knows about the device it runs on: base64url
+                 *     (no padding) of a UTF-8 JSON object. Daykeeper SDKs send it by default
+                 *     so agents see the app, device and OS on the contact without host code.
+                 *     It is presentation context, never authorization: a value the host
+                 *     backend signed into the customer token wins field by field, and the
+                 *     gateway drops any field that fails its check (and ignores the whole
+                 *     header when it is longer than 4096 characters or not an object),
+                 *     without failing the request. Contacts are updated when they are
+                 *     resolved to list, create or claim conversations; unread and seen
+                 *     polling never write it.
+                 */
+                "Daykeeper-Client"?: components["parameters"]["DaykeeperClient"];
+            };
             path?: never;
             cookie?: never;
         };
