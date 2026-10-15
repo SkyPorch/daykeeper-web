@@ -22,8 +22,9 @@ Releases follow this exact order. Do not reorder or skip a step.
    match.
 3. **Finalize the changelog.** Give the version its section in `CHANGELOG.md`
    with no `unreleased` marker left anywhere in the file.
-4. **One reviewed version-bump commit.** Bump `package.json`, land steps 2–3 in
-   the same reviewed commit, and merge it to `main`.
+4. **One reviewed version-bump commit.** Bump `package.json` and
+   `SDK_VERSION` in `src/version.ts` (a test keeps them equal), land steps 2–3
+   in the same reviewed commit, and merge it to `main`.
 5. **Create the GitHub release from a tag on `main`.** The release's target
    must be `main`, and the tag must already be an ancestor of `main`.
    `.github/workflows/release.yml` verifies both before any repository code is
@@ -42,6 +43,29 @@ A dry run of everything up to and including `npm publish --dry-run
 (`workflow_dispatch`) with `dry_run: true` (the default). The dry-run path never
 publishes and never stages, and it skips the tag-ancestry gate because a manual
 dispatch has no release tag.
+
+## Release gate: gateway allows `daykeeper-client`
+
+From the release that adds default device context, every browser request
+carries a `Daykeeper-Client` header, so the browser preflights it. A gateway
+that does not list `daykeeper-client` in
+`Access-Control-Allow-Headers` refuses the preflight and **every** request from
+the SDK fails.
+
+Before publishing this package, or releasing a messenger bundle that sends the
+header, confirm that the gateway serving every target origin allows
+`daykeeper-client` in its CORS preflight. Check with a preflight from an
+allowed origin:
+
+```sh
+curl -si -X OPTIONS https://<gateway>/v1/unread \
+  -H 'Origin: https://<allowed site>' \
+  -H 'Access-Control-Request-Method: GET' \
+  -H 'Access-Control-Request-Headers: authorization,daykeeper-client'
+```
+
+The response must allow `daykeeper-client`. Until it does, do not publish;
+hosts that must upgrade earlier can pass `sendDeviceContext: false`.
 
 ## 0.1.0 has no provenance attestation
 

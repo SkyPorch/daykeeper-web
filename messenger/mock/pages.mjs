@@ -11,6 +11,7 @@ function bootOptions(query, gatewayUrl, publishableKey) {
   if (THEMES.has(query.get("theme"))) options.theme = query.get("theme");
   if (query.get("position") === "left") options.position = "left";
   if (query.get("hideLauncher") === "1") options.hideLauncher = true;
+  if (query.get("deviceContext") === "0") options.sendDeviceContext = false;
   if (query.get("key") === "unknown")
     options.publishableKey = `dk_pk_${"Unknown".padEnd(32, "0")}`;
   return options;

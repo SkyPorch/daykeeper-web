@@ -1,3 +1,5 @@
+import { DEVICE_CONTEXT_HEADER } from "../../src/deviceContext.ts";
+
 /**
  * The people behind the inbox and how soon they reply: `GET /v1/messenger`
  * on the gateway. Everything here is optional decoration. The floating `v1`
@@ -34,6 +36,8 @@ export const EMPTY_PROFILE: MessengerProfile = Object.freeze({
 export type ProfileFetcher = (
   gatewayUrl: string,
   token: string,
+  /** `Daykeeper-Client` header value, or null to send none. */
+  deviceContext?: string | null,
 ) => Promise<MessengerProfile>;
 
 const EXPECTATIONS = new Set<ReplyExpectation>([
@@ -103,12 +107,21 @@ export function parseProfile(payload: unknown): MessengerProfile {
 }
 
 /** The real fetcher: same transport policy as the session exchange. */
-export const fetchProfile: ProfileFetcher = async (gatewayUrl, token) => {
+export const fetchProfile: ProfileFetcher = async (
+  gatewayUrl,
+  token,
+  deviceContext,
+) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    authorization: `Bearer ${token}`,
+  };
+  if (deviceContext) headers[DEVICE_CONTEXT_HEADER] = deviceContext;
   try {
     const response = await globalThis.fetch(`${gatewayUrl}/v1/messenger`, {
-      headers: { accept: "application/json", authorization: `Bearer ${token}` },
+      headers,
       signal: controller.signal,
       credentials: "omit",
       mode: "cors",

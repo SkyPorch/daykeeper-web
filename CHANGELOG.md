@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Default device context. Every request sends a `Daykeeper-Client` header
+  (base64url JSON) describing the browser: platform `web`, OS name and
+  version, `iPhone`/`iPad`/`iPod` model when known, browser name and version,
+  language, time zone, and `sdk: "web"` with the package version. It comes
+  from low-entropy User-Agent Client Hints with a small user-agent fallback,
+  is computed once and lazily, and is sent only from a page (`window` and
+  `document` present, not jsdom or happy-dom). Browser names and versions are
+  sent only as plain text. It never
+  includes the user-agent string, URLs, page titles, referrers, screen or
+  hardware details, or identifiers. Opt out with `sendDeviceContext: false`.
+  **Deploy the gateway that allows `daykeeper-client` in CORS preflights
+  first**: an older gateway refuses the preflight and
+  every browser request fails. See the release gate in
+  [RELEASING.md](RELEASING.md#release-gate-gateway-allows-daykeeper-client).
+- The hosted messenger sends the same header as `sdk: "web-messenger"` with
+  its own version on gateway requests (not on the visitor-session exchange),
+  with a `sendDeviceContext` boot option to opt out (`false`, `"false"`, `0`
+  or `"0"`).
+
 ## 0.2.0
 
 ### Breaking

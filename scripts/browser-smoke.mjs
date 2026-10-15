@@ -108,6 +108,7 @@ export async function browserSmoke({ consumer, directory }) {
       cookie: request.headers.cookie ?? null,
       referrer: request.headers.referer ?? null,
       authorization: request.headers.authorization ?? null,
+      client: request.headers["daykeeper-client"] ?? null,
     });
     const allowed = origin === pageOrigin && mode !== "denied";
     const cors = allowed
@@ -116,7 +117,8 @@ export async function browserSmoke({ consumer, directory }) {
     if (request.method === "OPTIONS") {
       response.writeHead(204, {
         ...cors,
-        "access-control-allow-headers": "authorization, content-type",
+        "access-control-allow-headers":
+          "authorization, content-type, daykeeper-client",
         "access-control-allow-methods": "GET, POST, OPTIONS",
       });
       response.end();
@@ -285,6 +287,18 @@ export async function browserSmoke({ consumer, directory }) {
       api.every((request) => request.referrer === null),
       "SDK request forwarded a referrer",
     );
+    for (const request of api) {
+      assert(request.client, "SDK request omitted its device context");
+      const context = JSON.parse(
+        Buffer.from(request.client, "base64url").toString("utf8"),
+      );
+      assert.equal(context.sdk, "web");
+      assert.equal(context.platform, "web");
+      assert(
+        !JSON.stringify(context).includes("Mozilla/"),
+        "Device context carried the user-agent string",
+      );
+    }
     assert.equal(
       redirectTargetRequests,
       0,
@@ -312,6 +326,7 @@ export async function browserSmoke({ consumer, directory }) {
         ...actual.checks,
         "all customer requests omitted cookies",
         "all customer requests omitted referrers",
+        "all customer requests carried a web device context",
         "redirect target received zero requests",
         "failed write received exactly one request",
         "denied preflight prevented API dispatch",

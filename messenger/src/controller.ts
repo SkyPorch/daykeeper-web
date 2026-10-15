@@ -4,7 +4,12 @@ import {
   type DaykeeperConversation,
   type DaykeeperMessage,
   type DaykeeperWebClient,
+  type DaykeeperWebClientOptions,
 } from "../../src/index.ts";
+import {
+  DEVICE_CONTEXT_SOURCE,
+  type DeviceContextSourceOption,
+} from "../../src/deviceContext.ts";
 import {
   isTerminal,
   MessengerError,
@@ -106,6 +111,11 @@ export interface ControllerEnvironment {
   timers?: Timers;
   isVisible?: () => boolean;
   fetchProfile?: ProfileFetcher;
+  /**
+   * The `Daykeeper-Client` header value for gateway requests, or null to send
+   * none. Defaults to none; `boot` supplies the messenger's own.
+   */
+  deviceContext?: () => string | null;
   createClient?: (
     gatewayUrl: string,
     getToken: (force: boolean) => Promise<string>,
@@ -200,6 +210,7 @@ export class MessengerController {
         typeof document === "undefined" ||
         document.visibilityState !== "hidden",
       fetchProfile,
+      deviceContext: () => null,
       ...env,
     };
   }
@@ -440,11 +451,16 @@ export class MessengerController {
       if (!this.#client || this.#clientGateway !== grant.gatewayUrl) {
         const factory =
           this.#env.createClient ??
-          ((baseUrl, getToken) =>
-            createDaykeeperWebClient({
+          ((baseUrl, getToken) => {
+            const options: DaykeeperWebClientOptions &
+              DeviceContextSourceOption = {
               baseUrl,
               getAccessToken: ({ forceRefresh }) => getToken(forceRefresh),
-            }));
+              // The messenger's own header (sdk "web-messenger"), or none.
+              [DEVICE_CONTEXT_SOURCE]: this.#env.deviceContext,
+            };
+            return createDaykeeperWebClient(options);
+          });
         this.#client = factory(grant.gatewayUrl, (force) =>
           this.#env.session.token(force).catch((error: unknown) => {
             this.#sessionError = toMessengerError(error);
@@ -535,7 +551,11 @@ export class MessengerController {
     try {
       const gatewayUrl = this.#clientGateway;
       const token = await this.#env.session.token();
-      const profile = await this.#env.fetchProfile(gatewayUrl, token);
+      const profile = await this.#env.fetchProfile(
+        gatewayUrl,
+        token,
+        this.#env.deviceContext(),
+      );
       if (!this.#stopped) this.#set({ profile });
     } catch {
       /* decoration only */

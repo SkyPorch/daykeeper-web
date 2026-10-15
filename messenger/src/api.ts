@@ -1,3 +1,4 @@
+import { lazyDeviceContext } from "../../src/deviceContext.ts";
 import { MessengerController } from "./controller.ts";
 import { VisitorSession } from "./session.ts";
 import { createVisitorStore } from "./storage.ts";
@@ -21,6 +22,11 @@ export const VERSION =
   typeof __MESSENGER_VERSION__ === "string" ? __MESSENGER_VERSION__ : "dev";
 export const DEFAULT_GATEWAY_URL = "https://gateway.mydaykeeper.com";
 const PUBLISHABLE_KEY = /^dk_pk_[A-Za-z0-9]{32}$/;
+/**
+ * Snippets and tag-manager config often pass strings or numbers, so every
+ * spelling of "off" opts out. Anything else keeps the default (on).
+ */
+const DEVICE_CONTEXT_OFF = new Set<unknown>([false, "false", 0, "0"]);
 const EVENTS = ["ready", "open", "close", "unreadCountChange"] as const;
 type EventName = (typeof EVENTS)[number];
 type Callback = (value?: unknown) => void;
@@ -33,6 +39,8 @@ export interface BootOptions {
   position?: "right" | "left";
   hideLauncher?: boolean;
   zIndex?: number;
+  /** Describe the browser to the gateway (default true); false sends none. */
+  sendDeviceContext?: boolean;
 }
 
 interface Instance {
@@ -102,6 +110,7 @@ export function parseBootOptions(
     position: options.position === "left" ? "left" : "right",
     hideLauncher: options.hideLauncher === true,
     zIndex,
+    sendDeviceContext: !DEVICE_CONTEXT_OFF.has(options.sendDeviceContext),
   };
 }
 
@@ -171,7 +180,13 @@ export function createMessengerApi(win: Window & typeof globalThis) {
       locale: options.locale,
       store,
     });
-    const controller = new MessengerController({ session, store });
+    const controller = new MessengerController({
+      session,
+      store,
+      deviceContext: options.sendDeviceContext
+        ? lazyDeviceContext({ sdk: "web-messenger", sdkVersion: VERSION })
+        : () => null,
+    });
     const view = new MessengerView(win.document, controller, {
       theme: options.theme,
       position: options.position,

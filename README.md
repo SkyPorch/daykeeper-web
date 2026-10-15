@@ -171,11 +171,37 @@ redirect metadata, but cannot undo a credential leak caused by a custom
 transport, extension, or service worker that already ignored redirect policy.
 
 Cross-origin use requires a configured gateway origin policy, successful
-Authorization/JSON preflights, and readable error responses. The inspected
+Authorization/JSON/`Daykeeper-Client` preflights, and readable error responses. The inspected
 platform baseline has origin/error-CORS gaps addressed in a separate, unmerged
 gateway PR; this SDK alone does not close the deployment gates.
 See [COMPATIBILITY.md](COMPATIBILITY.md). There is no live
 production browser certification or full-app parity claim in this foundation.
+
+## Device context
+
+Every request tells Daykeeper about the browser it runs in, so agents see it
+on the contact with no code in your app. A `Daykeeper-Client` header carries
+base64url-encoded JSON with: platform (`web`), OS name and version, device
+model (only `iPhone`, `iPad` or `iPod`, when the browser says so), browser name and
+version, browser language, time zone, and this SDK's name (`web`) and version.
+Values come from low-entropy User-Agent Client Hints, with a small user-agent
+parse as the fallback; versions browsers freeze in their user-agent string
+(macOS 10.15.7, Windows NT 10.0) are left out rather than guessed. Anything
+the browser cannot answer is left out. It is computed once, on the first
+request, and only in a page (`window` and `document` present): never in Node,
+server-side rendering, workers, or DOM emulators such as jsdom and happy-dom.
+Browser names and versions are sent only as plain text.
+
+It never includes the user-agent string, page URLs or titles, referrers, screen
+or hardware details, or any identifier. Values your backend signs into the
+customer session take precedence over what the browser reports.
+
+To send none of it, pass `sendDeviceContext: false`.
+
+The header requires a gateway whose CORS preflight allows `daykeeper-client`.
+Deploy that gateway first: an older gateway refuses the preflight, and every
+browser request fails. Use `sendDeviceContext: false` against a gateway that
+has not been updated yet.
 
 ## Development and provenance
 

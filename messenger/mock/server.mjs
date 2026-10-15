@@ -97,7 +97,7 @@ export async function startMock({
   let conversationSeq = 100;
   let messageSeq = 5000;
   const failures = []; // { route, status, code, times }
-  const requests = []; // { method, path, at }
+  const requests = []; // { method, path, at, client }
   const timers = new Set();
 
   const say = (...args) => log && console.log("[mock]", ...args);
@@ -256,6 +256,8 @@ export async function startMock({
           method: request.method,
           path: url.pathname + url.search,
           at: Date.now(),
+          // The SDK's device context header, as the real gateway reads it.
+          client: request.headers["daykeeper-client"] ?? null,
         });
         say(request.method, url.pathname + url.search);
       }
@@ -273,7 +275,8 @@ export async function startMock({
         return send(response, 204, null, {
           ...cors(origin),
           "access-control-allow-methods": "GET, POST, OPTIONS",
-          "access-control-allow-headers": "authorization, content-type, accept",
+          "access-control-allow-headers":
+            "authorization, content-type, accept, daykeeper-client",
           "access-control-max-age": "600",
         });
       }
