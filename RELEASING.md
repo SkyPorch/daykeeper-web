@@ -54,8 +54,8 @@ the SDK fails.
 
 Before publishing this package, or releasing a messenger bundle that sends the
 header, confirm that the gateway serving every target origin allows
-`daykeeper-client` in its CORS preflight, that is, SkyPorch/daykeeper#327 is
-deployed there. Check with a preflight from an allowed origin:
+`daykeeper-client` in its CORS preflight. Check with a preflight from an
+allowed origin:
 
 ```sh
 curl -si -X OPTIONS https://<gateway>/v1/unread \

@@ -15,7 +15,7 @@
   includes the user-agent string, URLs, page titles, referrers, screen or
   hardware details, or identifiers. Opt out with `sendDeviceContext: false`.
   **Deploy the gateway that allows `daykeeper-client` in CORS preflights
-  first** (SkyPorch/daykeeper#327): an older gateway refuses the preflight and
+  first**: an older gateway refuses the preflight and
   every browser request fails. See the release gate in
   [RELEASING.md](RELEASING.md#release-gate-gateway-allows-daykeeper-client).
 - The hosted messenger sends the same header as `sdk: "web-messenger"` with
