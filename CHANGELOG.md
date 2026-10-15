@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-10-15
 
 ### Added
 
@@ -22,6 +22,13 @@
   its own version on gateway requests (not on the visitor-session exchange),
   with a `sendDeviceContext` boot option to opt out (`false`, `"false"`, `0`
   or `"0"`).
+
+### Changed
+
+- The vendored customer contract is pinned to immutable OpenAPI tag
+  `v1.11.0` (customer contract 0.2.0), which documents the optional
+  `Daykeeper-Client` header. Generated types gain that optional header
+  parameter; request and response shapes are otherwise unchanged.
 
 ## 0.2.0
 

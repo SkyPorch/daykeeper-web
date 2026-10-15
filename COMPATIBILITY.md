@@ -4,11 +4,13 @@
 
 | Package version                               | Customer contract | Management contract                                                           | Contract tag | Contract commit                                                           |
 | --------------------------------------------- | ----------------- | ----------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------- |
+| `@skyporch/daykeeper-web` 0.3.0               | 0.2.0             | not consumed                                                                  | `v1.11.0`    | `4683bfa2eef41c0948a4ea1507ceb4c8e95f1bff` (`SkyPorch/daykeeper-openapi`) |
 | `@skyporch/daykeeper-web` 0.2.0               | 0.1.0             | not consumed (gateway management contract 0.2.0 is unrelated to this package) | `v1.1.0`     | `c9a0175d0053f1a2d57c9329f6d3a36ec6acdb71` (`SkyPorch/daykeeper-openapi`) |
 | `@skyporch/daykeeper-web` 0.1.0 (unpublished) | 0.1.0             | not consumed                                                                  | `v1.0.0`     | `35f5bd45fe0c6a6901766543bff90dae6838b965`                                |
 
 This package vendors the **customer** contract (`openapi/customer.yaml`), which
-is still at 0.1.0. The `Idempotency-Key` request header that becomes REQUIRED on
+is at 0.2.0 from tag `v1.11.0`; 0.2.0 adds only the optional
+`Daykeeper-Client` request header. The `Idempotency-Key` request header that becomes REQUIRED on
 flow mutations in the **management** contract 0.2.0, and the `200` returned
 alongside `201` for a replayed mutation, belong to that management contract
 only. Neither applies here: the customer contract defines no such header and no
@@ -18,7 +20,7 @@ such replay response, and `daykeeper-web` sends no management requests. The
 
 Per `SkyPorch/daykeeper-openapi` `VERSIONING.md`, contract releases are
 immutable `vMAJOR.MINOR.PATCH` tags and every SDK release must record the exact
-contract tag and commit it was built against. The 0.2.0 row above is not
+contract tag and commit it was built against. A row is not
 release-complete until `openapi/SOURCE.md` and that row both point at an
 immutable tag rather than a PR head; see `RELEASING.md` step 2.
 
