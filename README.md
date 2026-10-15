@@ -182,13 +182,15 @@ production browser certification or full-app parity claim in this foundation.
 Every request tells Daykeeper about the browser it runs in, so agents see it
 on the contact with no code in your app. A `Daykeeper-Client` header carries
 base64url-encoded JSON with: platform (`web`), OS name and version, device
-model (only `iPhone`/`iPad`, when the browser says so), browser name and
+model (only `iPhone`, `iPad` or `iPod`, when the browser says so), browser name and
 version, browser language, time zone, and this SDK's name (`web`) and version.
 Values come from low-entropy User-Agent Client Hints, with a small user-agent
 parse as the fallback; versions browsers freeze in their user-agent string
 (macOS 10.15.7, Windows NT 10.0) are left out rather than guessed. Anything
 the browser cannot answer is left out. It is computed once, on the first
-request, and never in Node or server-side rendering.
+request, and only in a page (`window` and `document` present): never in Node,
+server-side rendering, workers, or DOM emulators such as jsdom and happy-dom.
+Browser names and versions are sent only as plain text.
 
 It never includes the user-agent string, page URLs or titles, referrers, screen
 or hardware details, or any identifier. Values your backend signs into the

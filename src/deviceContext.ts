@@ -42,6 +42,8 @@ export interface DeviceContext {
 export interface DeviceEnvironment {
   navigator?: unknown;
   timeZone?: () => unknown;
+  /** True only when both `window` and `document` exist (a page). */
+  hasWindowAndDocument?: boolean;
 }
 
 /**
@@ -205,18 +207,31 @@ export function collectDeviceContext(
   identity: DaykeeperSdkIdentity,
   environment: DeviceEnvironment = browserEnvironment(),
 ): DeviceContext | null {
+  // Node, Deno and Bun expose a navigator too, and SSR has neither window
+  // nor document: only a page describes itself.
+  if (environment.hasWindowAndDocument !== true) return null;
   const nav = environment.navigator;
   if (!isRecord(nav)) return null;
   const userAgent = nav.userAgent;
-  // Node, Deno and Bun expose a navigator too ("Node.js/22"); every browser's
-  // user agent starts with "Mozilla/".
-  if (typeof userAgent !== "string" || !/^Mozilla\//.test(userAgent))
+  // Every browser's user agent starts with "Mozilla/". DOM emulators used in
+  // tests (jsdom, happy-dom) look like a page but are not a person's
+  // browser, so they send nothing either.
+  if (
+    typeof userAgent !== "string" ||
+    !/^Mozilla\//.test(userAgent) ||
+    /\b(?:jsdom|HappyDOM)\//i.test(userAgent)
+  )
     return null;
 
-  const touchPoints =
-    typeof nav.maxTouchPoints === "number" ? nav.maxTouchPoints : 0;
-  const parsed = parseUserAgent(userAgent, touchPoints);
   const hints = parseUserAgentData(nav.userAgentData);
+  // Only Safari on iPad presents a Mac user agent with a touch screen, and
+  // Safari has no client hints. A browser whose hints say macOS is on a Mac,
+  // touch screen or not.
+  const touchPoints =
+    hints.osName !== "macOS" && typeof nav.maxTouchPoints === "number"
+      ? nav.maxTouchPoints
+      : 0;
+  const parsed = parseUserAgent(userAgent, touchPoints);
   const osName = hints.osName ?? parsed.osName;
   // A version or model from the string only counts when the string agrees
   // with the client hints about which OS this is.
@@ -232,9 +247,10 @@ export function collectDeviceContext(
     assign(context, "osVersion", parsed.osVersion);
     assign(context, "deviceModel", parsed.deviceModel);
   }
-  assign(context, "browserName", browser.browserName);
-  if (browser.browserName) {
-    assign(context, "browserVersion", browser.browserVersion);
+  const browserName = plainText(browser.browserName);
+  if (browserName) {
+    assign(context, "browserName", browserName);
+    assign(context, "browserVersion", plainText(browser.browserVersion));
   }
   const locale = typeof nav.language === "string" ? nav.language.trim() : "";
   if (locale.length <= 35 && LOCALE.test(locale)) context.locale = locale;
@@ -295,9 +311,22 @@ export function lazyDeviceContext(
 
 function browserEnvironment(): DeviceEnvironment {
   return {
+    hasWindowAndDocument:
+      typeof window !== "undefined" && typeof document !== "undefined",
     navigator: typeof navigator === "undefined" ? undefined : navigator,
     timeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
   };
+}
+
+/**
+ * Brand names come from the browser and end up in an agent's sidebar: only
+ * plain text survives (no control characters, angle brackets or quotes).
+ */
+function plainText(value: string | undefined): string | undefined {
+  return typeof value === "string" &&
+    !/[\u0000-\u001f\u007f-\u009f<>"'`]/.test(value)
+    ? value
+    : undefined;
 }
 
 function assign(

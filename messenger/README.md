@@ -84,11 +84,11 @@ on a `<daykeeper-messenger>` element and is unaffected by page CSS.
 - **Device context.** Gateway requests (conversations, messages, unread,
   seen, `/v1/messenger`) carry a `Daykeeper-Client` header so agents see the
   visitor's browser on the contact: base64url JSON with platform `web`, OS
-  name and version, `iPhone`/`iPad` when known, browser name and version,
+  name and version, `iPhone`/`iPad`/`iPod` when known, browser name and version,
   language, time zone, and `sdk: "web-messenger"` with the messenger version.
   It never includes the user-agent string, page URLs or titles, referrers,
   screen details or identifiers. The visitor-session exchange does not send
-  it. `sendDeviceContext: false` in `boot` sends none. The gateway must allow
+  it. `sendDeviceContext: false` in `boot` (or `"false"`, `0`, `"0"`) sends none. The gateway must allow
   `daykeeper-client` in its CORS preflight before a messenger that sends it is
   released; an older gateway refuses the preflight and the messenger cannot
   connect.

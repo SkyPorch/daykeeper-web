@@ -23,7 +23,11 @@ const decode = (value: string): Record<string, unknown> =>
 const browser = (
   navigator: Record<string, unknown>,
   timeZone: unknown = "Europe/Amsterdam",
-): DeviceEnvironment => ({ navigator, timeZone: () => timeZone });
+): DeviceEnvironment => ({
+  hasWindowAndDocument: true,
+  navigator,
+  timeZone: () => timeZone,
+});
 
 const UA = {
   chromeWindows:
@@ -164,6 +168,18 @@ const userAgents: [string, string, number, Record<string, string>][] = [
       deviceModel: "iPad",
       browserName: "Safari",
       browserVersion: "18.1",
+    },
+  ],
+  [
+    "Safari on iPod touch",
+    "Mozilla/5.0 (iPod touch; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6.6 Mobile/15E148 Safari/604.1",
+    5,
+    {
+      osName: "iOS",
+      osVersion: "15.8",
+      deviceModel: "iPod",
+      browserName: "Safari",
+      browserVersion: "15.6.6",
     },
   ],
   [
@@ -427,6 +443,7 @@ test("omits what it cannot answer and never sends empty or oversized values", ()
 
   // An invalid locale or a throwing time zone lookup is just left out.
   const odd = collectDeviceContext(WEB, {
+    hasWindowAndDocument: true,
     navigator: { userAgent: UA.chromeWindows, language: "<script>" },
     timeZone: () => {
       throw new RangeError("no Intl");
@@ -470,12 +487,23 @@ test("omits what it cannot answer and never sends empty or oversized values", ()
 });
 
 test("outside a browser nothing is collected or sent", () => {
-  assert.equal(collectDeviceContext(WEB, { navigator: undefined }), null);
-  assert.equal(collectDeviceContext(WEB, { navigator: {} }), null);
+  assert.equal(collectDeviceContext(WEB, browser({})), null);
+  assert.equal(collectDeviceContext(WEB, { hasWindowAndDocument: true }), null);
   // Node 21+, Deno and Bun expose a navigator that is not a browser.
   for (const userAgent of ["Node.js/22", "Deno/2.0.0", "Bun/1.1.0"]) {
     assert.equal(
-      collectDeviceContext(WEB, { navigator: { userAgent, language: "en" } }),
+      collectDeviceContext(WEB, browser({ userAgent, language: "en" })),
+      null,
+    );
+  }
+  // A browser-looking navigator is not enough without a window and a
+  // document (SSR with a polyfilled navigator, a worker).
+  for (const hasWindowAndDocument of [false, undefined]) {
+    assert.equal(
+      collectDeviceContext(WEB, {
+        hasWindowAndDocument,
+        navigator: { userAgent: UA.chromeWindows, language: "en" },
+      }),
       null,
     );
   }
@@ -506,6 +534,7 @@ test("the header value is computed once, lazily, and never throws", () => {
   });
 
   const hostile = lazyDeviceContext(WEB, () => ({
+    hasWindowAndDocument: true,
     navigator: new Proxy(
       {},
       {
@@ -522,19 +551,34 @@ test("the header value is computed once, lazily, and never throws", () => {
   assert.equal(throwingEnvironment(), null);
 });
 
-/** Install a browser-like navigator on globalThis for one test. */
+/**
+ * Install page globals for one test: a navigator and, unless `page` is
+ * false, a `window` and a `document`.
+ */
 function withNavigator(
   value: unknown,
   run: () => Promise<void>,
+  page = true,
 ): Promise<void> {
-  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
-  Object.defineProperty(globalThis, "navigator", {
-    configurable: true,
-    get: () => value,
-  });
+  const globals: Record<string, unknown> = { navigator: value };
+  if (page) {
+    globals.window = {};
+    globals.document = {};
+  }
+  const previous = Object.keys(globals).map(
+    (name) =>
+      [name, Object.getOwnPropertyDescriptor(globalThis, name)] as const,
+  );
+  for (const [name, stub] of Object.entries(globals))
+    Object.defineProperty(globalThis, name, {
+      configurable: true,
+      get: () => stub,
+    });
   return run().finally(() => {
-    if (descriptor) Object.defineProperty(globalThis, "navigator", descriptor);
-    else Reflect.deleteProperty(globalThis, "navigator");
+    for (const [name, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else Reflect.deleteProperty(globalThis, name);
+    }
   });
 }
 
@@ -646,6 +690,156 @@ test("no header outside a browser, and a hostile navigator never fails a request
       const hostile = recordingClient();
       assert.deepEqual(await hostile.client.getUnread(), { ok: true });
       assert.equal(hostile.seen[0]?.headers.has("daykeeper-client"), false);
+    },
+  );
+});
+
+test("DOM emulators (jsdom, happy-dom) send nothing even with a window and document", () => {
+  for (const userAgent of [
+    "Mozilla/5.0 (darwin) AppleWebKit/537.36 (KHTML, like Gecko) jsdom/26.1.0",
+    "Mozilla/5.0 (X11; Linux x64) AppleWebKit/537.36 (KHTML, like Gecko) HappyDOM/0.0.0",
+  ]) {
+    assert.equal(
+      collectDeviceContext(WEB, browser({ userAgent, language: "en-US" })),
+      null,
+      userAgent,
+    );
+  }
+});
+
+test("a touchscreen Mac whose client hints say macOS is not an iPad", () => {
+  const mac = collectDeviceContext(
+    WEB,
+    browser({
+      userAgent: UA.chromeMac,
+      language: "en-US",
+      maxTouchPoints: 10,
+      userAgentData: {
+        platform: "macOS",
+        brands: [{ brand: "Google Chrome", version: "129" }],
+      },
+    }),
+  );
+  assert.equal(mac?.osName, "macOS");
+  assert.equal(mac?.deviceModel, undefined);
+
+  // Safari on iPad asking for desktop sites has no client hints: a Mac user
+  // agent with a touch screen is still an iPad.
+  const ipad = collectDeviceContext(
+    WEB,
+    browser({
+      userAgent: UA.safariMacFrozen,
+      language: "en-US",
+      maxTouchPoints: 5,
+    }),
+  );
+  assert.equal(ipad?.osName, "iPadOS");
+  assert.equal(ipad?.deviceModel, "iPad");
+});
+
+test("browser names and versions are sent only as plain text", () => {
+  const brand = (name: string, version = "129") =>
+    collectDeviceContext(
+      WEB,
+      browser({
+        userAgent: UA.chromeWindows,
+        language: "en-US",
+        userAgentData: {
+          platform: "Windows",
+          brands: [{ brand: name, version }],
+        },
+      }),
+    );
+  for (const unsafe of [
+    "Evil<script>",
+    "Evil>",
+    'Say "hi"',
+    "O'Brien",
+    "Tick`",
+    "Bell\u0007",
+    "Line\nbreak",
+    "C1\u0085",
+  ]) {
+    const context = brand(unsafe);
+    assert.equal(context?.browserName, undefined, unsafe);
+    assert.equal(context?.browserVersion, undefined, unsafe);
+  }
+  const badVersion = brand("Brave", '1"2');
+  assert.equal(badVersion?.browserName, "Brave");
+  assert.equal(badVersion?.browserVersion, undefined);
+  assert.equal(brand("Opera GX", "114")?.browserName, "Opera GX");
+});
+
+test("no header with a browser navigator but no window/document, or under jsdom", async () => {
+  await withNavigator(
+    { userAgent: UA.chromeWindows, language: "en-US" },
+    async () => {
+      const { client, seen } = recordingClient();
+      await client.getUnread();
+      assert.equal(seen[0]?.headers.has("daykeeper-client"), false);
+    },
+    false,
+  );
+  await withNavigator(
+    {
+      userAgent:
+        "Mozilla/5.0 (darwin) AppleWebKit/537.36 (KHTML, like Gecko) jsdom/26.1.0",
+      language: "en-US",
+    },
+    async () => {
+      const { client, seen } = recordingClient();
+      await client.getUnread();
+      assert.equal(seen[0]?.headers.has("daykeeper-client"), false);
+    },
+  );
+});
+
+test("the token provider never sees the header; a 401 GET retry sends it again", async () => {
+  await withNavigator(
+    { userAgent: UA.safariIphone, language: "en-US", maxTouchPoints: 5 },
+    async () => {
+      const contexts: unknown[] = [];
+      const seen: Request[] = [];
+      const client = createDaykeeperWebClient({
+        baseUrl: "https://support.example.com",
+        getAccessToken: (context) => {
+          contexts.push(context);
+          return `synthetic-token-${contexts.length}`;
+        },
+        fetch: async (input) => {
+          seen.push(input as Request);
+          return seen.length === 1
+            ? Response.json({ error: "expired_token" }, { status: 401 })
+            : Response.json({ unreadCount: 0 });
+        },
+      });
+      assert.deepEqual(await client.getUnread(), { unreadCount: 0 });
+
+      assert.equal(contexts.length, 2);
+      for (const context of contexts) {
+        assert.deepEqual(Object.keys(context as object).sort(), [
+          "forceRefresh",
+          "signal",
+        ]);
+      }
+      assert.deepEqual(
+        contexts.map(
+          (context) => (context as { forceRefresh: boolean }).forceRefresh,
+        ),
+        [false, true],
+      );
+
+      assert.equal(seen.length, 2);
+      const [first, retry] = seen.map((request) =>
+        request.headers.get("daykeeper-client"),
+      );
+      assert(first);
+      assert.equal(retry, first, "the retry carries the same header");
+      assert.equal(decode(first).deviceModel, "iPhone");
+      assert.equal(
+        seen[1]?.headers.get("authorization"),
+        "Bearer synthetic-token-2",
+      );
     },
   );
 });

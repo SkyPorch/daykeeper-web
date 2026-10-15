@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { lazyDeviceContext } from "../../../src/deviceContext.ts";
 import { parseBootOptions } from "../../src/api.ts";
 import { MessengerController } from "../../src/controller.ts";
 import { fetchProfile } from "../../src/profile.ts";
@@ -37,17 +38,29 @@ async function withFetch(
   }
 }
 
+/** A page: browser navigator plus `window` and `document`. */
 async function withBrowserNavigator(run: () => Promise<void>): Promise<void> {
-  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
-  Object.defineProperty(globalThis, "navigator", {
-    configurable: true,
-    get: () => BROWSER_NAVIGATOR,
-  });
+  const globals: Record<string, unknown> = {
+    navigator: BROWSER_NAVIGATOR,
+    window: {},
+    document: {},
+  };
+  const previous = Object.keys(globals).map(
+    (name) =>
+      [name, Object.getOwnPropertyDescriptor(globalThis, name)] as const,
+  );
+  for (const [name, stub] of Object.entries(globals))
+    Object.defineProperty(globalThis, name, {
+      configurable: true,
+      get: () => stub,
+    });
   try {
     await run();
   } finally {
-    if (descriptor) Object.defineProperty(globalThis, "navigator", descriptor);
-    else Reflect.deleteProperty(globalThis, "navigator");
+    for (const [name, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else Reflect.deleteProperty(globalThis, name);
+    }
   }
 }
 
@@ -116,6 +129,8 @@ test("the controller's client and profile requests carry the messenger's header"
 test("without a messenger header the bundled client never falls back to sdk web", async () => {
   await withBrowserNavigator(() =>
     withFetch(gatewayAnswer, async (seen) => {
+      // This stub is a page: the plain headless SDK would describe it.
+      assert(lazyDeviceContext({ sdk: "web", sdkVersion: "0.0.0" })());
       for (const controller of [controllerWith(), controllerWith(() => null)]) {
         controller.open();
         await settle();
@@ -128,16 +143,18 @@ test("without a messenger header the bundled client never falls back to sdk web"
   );
 });
 
-test("boot options: sendDeviceContext defaults to true, false opts out", () => {
+test("boot options: sendDeviceContext is on unless a spelling of off is given", () => {
+  const parsed = (sendDeviceContext?: unknown) =>
+    parseBootOptions({ publishableKey: KEY, sendDeviceContext })
+      ?.sendDeviceContext;
   assert.equal(
     parseBootOptions({ publishableKey: KEY })?.sendDeviceContext,
     true,
   );
-  assert.equal(
-    parseBootOptions({ publishableKey: KEY, sendDeviceContext: false })
-      ?.sendDeviceContext,
-    false,
-  );
+  // Snippets and tag-manager config pass strings and numbers.
+  for (const off of [false, "false", 0, "0"]) assert.equal(parsed(off), false);
+  for (const on of [true, "true", 1, "1", "", null, undefined, "no"])
+    assert.equal(parsed(on), true, String(on));
 });
 
 test("the visitor-session exchange never sends the header (strict control-plane schema)", async () => {
