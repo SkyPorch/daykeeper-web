@@ -1,9 +1,16 @@
+import {
+  DEVICE_CONTEXT_HEADER,
+  DEVICE_CONTEXT_SOURCE,
+  lazyDeviceContext,
+  type DeviceContextSourceOption,
+} from "./deviceContext.js";
 import { DaykeeperWebApiError, DaykeeperWebTransportError } from "./errors.js";
 import {
   createRequestLifetime,
   discardResponse,
   discardReader,
 } from "./requestLifetime.js";
+import { SDK_VERSION } from "./version.js";
 import type {
   DaykeeperClaimConversationResult,
   DaykeeperConversationList,
@@ -55,6 +62,15 @@ export interface DaykeeperWebClientOptions {
   /** Advanced transport injection; it must preserve standard Fetch security. */
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
+  /**
+   * Describe the browser on every request (OS and version, browser and
+   * version, language, time zone, and this SDK's name and version) in a
+   * `Daykeeper-Client` header, so agents see it on the contact. Never sends
+   * the user-agent string, URLs, page titles, referrers, screen metrics or any
+   * identifier. Requires a gateway that allows the header in CORS preflights.
+   * Defaults to true; pass false to send none of it.
+   */
+  sendDeviceContext?: boolean;
 }
 
 export interface DaykeeperWebRequestOptions {
@@ -66,6 +82,7 @@ export class DaykeeperWebClient {
   readonly #fetch: typeof globalThis.fetch;
   readonly #getAccessToken: DaykeeperWebTokenProvider;
   readonly #timeoutMs: number;
+  readonly #deviceContext: (() => string | null) | null;
 
   constructor(options: DaykeeperWebClientOptions) {
     if (!options || typeof options !== "object") {
@@ -91,6 +108,21 @@ export class DaykeeperWebClient {
     }
     this.#getAccessToken = options.getAccessToken;
     this.#timeoutMs = validateTimeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    if (
+      options.sendDeviceContext !== undefined &&
+      typeof options.sendDeviceContext !== "boolean"
+    ) {
+      throw configurationError("sendDeviceContext must be a boolean");
+    }
+    const source = (options as DeviceContextSourceOption)[
+      DEVICE_CONTEXT_SOURCE
+    ];
+    this.#deviceContext =
+      options.sendDeviceContext === false
+        ? null
+        : typeof source === "function"
+          ? source
+          : lazyDeviceContext({ sdk: "web", sdkVersion: SDK_VERSION });
   }
 
   getIdentity(
@@ -211,6 +243,8 @@ export class DaykeeperWebClient {
         if (options.body !== undefined) {
           headers.set("content-type", "application/json");
         }
+        const deviceContext = readDeviceContext(this.#deviceContext);
+        if (deviceContext) headers.set(DEVICE_CONTEXT_HEADER, deviceContext);
 
         try {
           response = await lifetime.run(() => {
@@ -332,6 +366,21 @@ function hardenFetch(
     }
     return fetchImpl(request);
   };
+}
+
+/** Device context is decoration: it can never fail a request. */
+function readDeviceContext(
+  source: (() => string | null) | null,
+): string | null {
+  if (!source) return null;
+  try {
+    const value = source();
+    return typeof value === "string" && /^[A-Za-z0-9_-]+$/.test(value)
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 async function resolveToken(

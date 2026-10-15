@@ -22,8 +22,9 @@ Releases follow this exact order. Do not reorder or skip a step.
    match.
 3. **Finalize the changelog.** Give the version its section in `CHANGELOG.md`
    with no `unreleased` marker left anywhere in the file.
-4. **One reviewed version-bump commit.** Bump `package.json`, land steps 2–3 in
-   the same reviewed commit, and merge it to `main`.
+4. **One reviewed version-bump commit.** Bump `package.json` and
+   `SDK_VERSION` in `src/version.ts` (a test keeps them equal), land steps 2–3
+   in the same reviewed commit, and merge it to `main`.
 5. **Create the GitHub release from a tag on `main`.** The release's target
    must be `main`, and the tag must already be an ancestor of `main`.
    `.github/workflows/release.yml` verifies both before any repository code is

@@ -1,3 +1,4 @@
+import { lazyDeviceContext } from "../../src/deviceContext.ts";
 import { MessengerController } from "./controller.ts";
 import { VisitorSession } from "./session.ts";
 import { createVisitorStore } from "./storage.ts";
@@ -33,6 +34,8 @@ export interface BootOptions {
   position?: "right" | "left";
   hideLauncher?: boolean;
   zIndex?: number;
+  /** Describe the browser to the gateway (default true); false sends none. */
+  sendDeviceContext?: boolean;
 }
 
 interface Instance {
@@ -102,6 +105,7 @@ export function parseBootOptions(
     position: options.position === "left" ? "left" : "right",
     hideLauncher: options.hideLauncher === true,
     zIndex,
+    sendDeviceContext: options.sendDeviceContext !== false,
   };
 }
 
@@ -171,7 +175,13 @@ export function createMessengerApi(win: Window & typeof globalThis) {
       locale: options.locale,
       store,
     });
-    const controller = new MessengerController({ session, store });
+    const controller = new MessengerController({
+      session,
+      store,
+      deviceContext: options.sendDeviceContext
+        ? lazyDeviceContext({ sdk: "web-messenger", sdkVersion: VERSION })
+        : () => null,
+    });
     const view = new MessengerView(win.document, controller, {
       theme: options.theme,
       position: options.position,

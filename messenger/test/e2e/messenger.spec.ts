@@ -1005,3 +1005,83 @@ test.describe("isolation", () => {
     ).toEqual(["ready", "open", "close"]);
   });
 });
+
+test.describe("device context", () => {
+  const { version } = require("../../package.json") as { version: string };
+  const decode = (value: string) =>
+    JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as Record<
+      string,
+      unknown
+    >;
+
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(openShadowRoots);
+  });
+
+  test("gateway requests describe the browser; the session exchange does not", async ({
+    page,
+    mock,
+  }) => {
+    const m = messenger(page);
+    await page.goto(`${mock.siteUrl}/`);
+    await m.launcher.click();
+    await expect(m.panel).toBeVisible();
+    await waitForRequest(
+      mock,
+      (r) => r.method === "GET" && r.path === "/v1/conversations",
+    );
+    await waitForRequest(
+      mock,
+      (r) => r.method === "GET" && r.path === "/v1/messenger",
+    );
+    const browser = await page.evaluate(() => ({
+      locale: navigator.language,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }));
+    const { requests } = await mock.state();
+    const sessions = requests.filter((r) => r.path === "/v1/visitor-sessions");
+    expect(sessions.length).toBeGreaterThan(0);
+    for (const request of sessions) expect(request.client).toBeNull();
+
+    const gateway = requests.filter(
+      (r) =>
+        r.method !== "OPTIONS" &&
+        r.path.startsWith("/v1/") &&
+        r.path !== "/v1/visitor-sessions",
+    );
+    expect(gateway.map((r) => r.path)).toEqual(
+      expect.arrayContaining(["/v1/conversations", "/v1/messenger"]),
+    );
+    for (const request of gateway) {
+      expect(request.client).toMatch(/^[A-Za-z0-9_-]+$/);
+      const context = decode(request.client!);
+      expect(context).toMatchObject({
+        sdk: "web-messenger",
+        sdkVersion: version,
+        platform: "web",
+        osName: expect.any(String),
+        browserName: expect.any(String),
+        locale: browser.locale,
+        timeZone: browser.timeZone,
+      });
+      const json = JSON.stringify(context);
+      expect(json).not.toContain("Mozilla");
+      expect(json).not.toContain("127.0.0.1");
+      expect(json).not.toContain("localhost");
+    }
+  });
+
+  test("sendDeviceContext: false sends none", async ({ page, mock }) => {
+    const m = messenger(page);
+    await page.goto(`${mock.siteUrl}/?deviceContext=0`);
+    await m.launcher.click();
+    await expect(m.panel).toBeVisible();
+    await waitForRequest(
+      mock,
+      (r) => r.method === "GET" && r.path === "/v1/messenger",
+    );
+    const { requests } = await mock.state();
+    expect(requests.length).toBeGreaterThan(0);
+    for (const request of requests) expect(request.client).toBeNull();
+  });
+});

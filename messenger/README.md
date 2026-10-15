@@ -36,13 +36,13 @@ styles, `eval` or remote fonts are used, photos are requested with
 
 ### API
 
-| Call                                                                       | Effect                                                                                                                                                                     |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Daykeeper('boot', options)`                                               | Mount the launcher. `publishableKey` is required; optional `gatewayUrl`, `locale`, `theme` (`auto`/`light`/`dark`), `position` (`right`/`left`), `hideLauncher`, `zIndex`. |
-| `Daykeeper('shutdown', { forget? })`                                       | Stop polling and remove the messenger; `forget: true` also deletes the stored visitor.                                                                                     |
-| `Daykeeper('show' \| 'hide' \| 'toggle')`                                  | Open or close the panel.                                                                                                                                                   |
-| `Daykeeper('showNewMessage', text?)`                                       | Open a new conversation with the composer prefilled (never sent automatically).                                                                                            |
-| `Daykeeper('on', 'ready' \| 'open' \| 'close' \| 'unreadCountChange', cb)` | Subscribe; returns an unsubscribe function once the script has loaded.                                                                                                     |
+| Call                                                                       | Effect                                                                                                                                                                                          |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Daykeeper('boot', options)`                                               | Mount the launcher. `publishableKey` is required; optional `gatewayUrl`, `locale`, `theme` (`auto`/`light`/`dark`), `position` (`right`/`left`), `hideLauncher`, `zIndex`, `sendDeviceContext`. |
+| `Daykeeper('shutdown', { forget? })`                                       | Stop polling and remove the messenger; `forget: true` also deletes the stored visitor.                                                                                                          |
+| `Daykeeper('show' \| 'hide' \| 'toggle')`                                  | Open or close the panel.                                                                                                                                                                        |
+| `Daykeeper('showNewMessage', text?)`                                       | Open a new conversation with the composer prefilled (never sent automatically).                                                                                                                 |
+| `Daykeeper('on', 'ready' \| 'open' \| 'close' \| 'unreadCountChange', cb)` | Subscribe; returns an unsubscribe function once the script has loaded.                                                                                                                          |
 
 `window.Daykeeper` is the only global. The UI lives in a closed shadow root
 on a `<daykeeper-messenger>` element and is unaffected by page CSS.
@@ -81,6 +81,17 @@ on a `<daykeeper-messenger>` element and is unaffected by page CSS.
   replies show their photo. A gateway without the route (404), a failure or a
   malformed answer leaves all of this out: the monogram stays and no line is
   shown.
+- **Device context.** Gateway requests (conversations, messages, unread,
+  seen, `/v1/messenger`) carry a `Daykeeper-Client` header so agents see the
+  visitor's browser on the contact: base64url JSON with platform `web`, OS
+  name and version, `iPhone`/`iPad` when known, browser name and version,
+  language, time zone, and `sdk: "web-messenger"` with the messenger version.
+  It never includes the user-agent string, page URLs or titles, referrers,
+  screen details or identifiers. The visitor-session exchange does not send
+  it. `sendDeviceContext: false` in `boot` sends none. The gateway must allow
+  `daykeeper-client` in its CORS preflight before a messenger that sends it is
+  released; an older gateway refuses the preflight and the messenger cannot
+  connect.
 - **Errors.** `web_client_unavailable` and `web_client_disabled` show "Chat is
   unavailable" and stop all traffic. `origin_not_allowed` stops traffic too.
   `temporarily_unavailable` and network failures show a connection state with

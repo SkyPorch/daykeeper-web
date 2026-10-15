@@ -19,7 +19,13 @@ export interface MockState {
     unreadForContact: number;
     messages: MockMessage[];
   }[];
-  requests: { method: string; path: string; at: number }[];
+  requests: {
+    method: string;
+    path: string;
+    at: number;
+    /** The raw `Daykeeper-Client` header, or null. */
+    client: string | null;
+  }[];
 }
 
 export interface SeedThread {

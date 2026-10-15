@@ -43,6 +43,7 @@ test("boot options are validated and defaulted", () => {
       position: "left",
       hideLauncher: false,
       zIndex: 2147483000,
+      sendDeviceContext: true,
     });
     assert.equal(warnings.length, 3);
   } finally {
