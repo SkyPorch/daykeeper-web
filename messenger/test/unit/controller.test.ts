@@ -144,7 +144,12 @@ function setup(options: { stored?: boolean; hasConversation?: boolean } = {}) {
     expiresAt: clock.now + 300_000,
     gatewayUrl: "https://gateway.example.test",
     visitorId: VISITOR.visitorId,
-    inbox: { name: "Example", greeting: null, accentColor: null },
+    inbox: {
+      name: "Example",
+      greeting: null,
+      accentColor: null,
+      logoUrl: null,
+    },
   };
   const ensure = async (force = false) => {
     sessionCalls.push(force);

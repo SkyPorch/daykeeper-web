@@ -74,7 +74,12 @@ function controllerWith(deviceContext?: () => string | null) {
     expiresAt: Date.now() + 300_000,
     gatewayUrl: GATEWAY,
     visitorId: "v_aaaaaaaaaaaaaaaaaaaaaaaaaa",
-    inbox: { name: "Example", greeting: null, accentColor: null },
+    inbox: {
+      name: "Example",
+      greeting: null,
+      accentColor: null,
+      logoUrl: null,
+    },
   };
   const session = {
     grant,

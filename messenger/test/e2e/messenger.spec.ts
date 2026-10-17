@@ -548,6 +548,107 @@ test.describe("team and reply time", () => {
     await expect(m.host.locator(".state")).toHaveCount(0);
   });
 
+  test("the company logo stands in for the inbox's initial", async ({
+    page,
+    mock,
+  }) => {
+    await mock.configure({ team: [], inbox: { logo: "fern" } });
+    const m = messenger(page);
+    await page.goto(`${mock.siteUrl}/`);
+    await m.launcher.click();
+    const topbar = m.host.locator(".topbar .monogram");
+    await expect(topbar).toHaveClass(/\blogo\b/);
+    await expect(topbar.locator("img")).toHaveAttribute(
+      "src",
+      `${mock.gatewayUrl}/logos/fern.svg`,
+    );
+    await expect(topbar.locator("img")).toHaveAttribute(
+      "referrerpolicy",
+      "no-referrer",
+    );
+    await expect
+      .poll(() =>
+        topbar
+          .locator("img")
+          .evaluate((img: HTMLImageElement) => img.naturalWidth),
+      )
+      .toBeGreaterThan(0);
+    // The thread's intro shows it large.
+    await m.newConversation.click();
+    await expect(
+      m.host.locator(".intro-avatar .monogram.logo img"),
+    ).toHaveCount(1);
+  });
+
+  test("with a team, home keeps the logo beside the name", async ({
+    page,
+    mock,
+  }) => {
+    await mock.configure({ inbox: { logo: "fern" } });
+    const m = messenger(page);
+    await page.goto(`${mock.siteUrl}/`);
+    await m.launcher.click();
+    await expect(m.host.locator(".hero-team .avatar")).toHaveCount(3);
+    await expect(m.host.locator(".topbar .monogram.logo")).toBeVisible();
+    // In a thread the team's faces take the mark's place, logo or not.
+    await m.newConversation.click();
+    await expect(m.host.locator(".topbar .stack-slot .avatar")).toHaveCount(3);
+    await expect(m.host.locator(".topbar .monogram")).toBeHidden();
+    await expect(m.host.locator(".intro-avatar .stack")).toHaveCount(1);
+  });
+
+  test("with a team, a logo that cannot load leaves no stray initial on home", async ({
+    page,
+    mock,
+  }) => {
+    await mock.configure({ inbox: { logo: "missing" } });
+    // The mock answers no logoUrl for an unknown slug; point it at a 404.
+    await page.route("**/v1/visitor-sessions", async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.data.inbox.logoUrl = `${mock.gatewayUrl}/logos/missing.svg`;
+      await route.fulfill({ response, json: body });
+    });
+    const m = messenger(page);
+    await page.goto(`${mock.siteUrl}/`);
+    await m.launcher.click();
+    await expect(m.host.locator(".hero-team .avatar")).toHaveCount(3);
+    await expect(m.host.locator(".topbar .monogram img")).toHaveCount(0);
+    await expect(m.host.locator(".topbar .monogram")).toBeHidden();
+  });
+
+  test("a logo that never loads leaves the initial, not a blank disc", async ({
+    page,
+    mock,
+  }) => {
+    await mock.configure({ team: [], inbox: { logo: "fern" } });
+    await page.route("**/logos/fern.svg", () => {
+      /* never answered */
+    });
+    const m = messenger(page);
+    await page.goto(`${mock.siteUrl}/`);
+    await m.launcher.click();
+    const topbar = m.host.locator(".topbar .monogram");
+    await expect(topbar).toBeVisible();
+    await expect(topbar).not.toHaveClass(/\blogo\b/);
+    await expect(topbar).toHaveText("F");
+  });
+
+  test("a logo the page's CSP blocks falls back to the initial", async ({
+    page,
+    mock,
+  }) => {
+    await mock.configure({ team: [], inbox: { logo: "fern" } });
+    const m = messenger(page);
+    await page.goto(`${mock.siteUrl}/?photos=0`);
+    await m.launcher.click();
+    const topbar = m.host.locator(".topbar .monogram");
+    await expect(topbar).toBeVisible();
+    await expect(topbar.locator("img")).toHaveCount(0);
+    await expect(topbar).not.toHaveClass(/\blogo\b/);
+    await expect(topbar).toHaveText("F");
+  });
+
   test("a photo the page's CSP blocks falls back to initials", async ({
     page,
     mock,

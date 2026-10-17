@@ -1,4 +1,5 @@
 import { MessengerError, type MessengerErrorCode } from "./errors.ts";
+import { photoUrl } from "./profile.ts";
 import {
   VISITOR_ID_PATTERN,
   VISITOR_SECRET_PATTERN,
@@ -18,6 +19,8 @@ export interface InboxInfo {
   name: string;
   greeting: string | null;
   accentColor: string | null;
+  /** The company logo, shown in place of the name's initial (server 1.13.0). */
+  logoUrl: string | null;
 }
 
 export interface SessionGrant {
@@ -251,6 +254,8 @@ export class VisitorSession {
           /^#[0-9a-fA-F]{6}$/.test(inbox.accentColor)
             ? inbox.accentColor.toLowerCase()
             : null,
+        // Same rules as a teammate's photo: https (or loopback http) only.
+        logoUrl: photoUrl(inbox?.logoUrl),
       },
     };
   }

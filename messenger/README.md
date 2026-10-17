@@ -29,7 +29,9 @@ https://cdn.mydaykeeper.com`, and `connect-src https://gateway.mydaykeeper.com`.
 Teammates' photos load from the support workspace origin: add `img-src
 https://support.mydaykeeper.com` (plus the storage host its avatar URLs
 redirect to, if the workspace keeps uploads off-host). Without it the photos
-are blocked and the messenger shows the teammates' initials instead. No inline
+are blocked and the messenger shows the teammates' initials instead. The
+company logo loads from the CDN: add `img-src https://cdn.mydaykeeper.com`, or
+the messenger shows the inbox's initial instead. No inline
 styles, `eval` or remote fonts are used, photos are requested with
 `referrerpolicy="no-referrer"`, and the messenger works with
 `require-trusted-types-for 'script'`.
@@ -81,6 +83,14 @@ on a `<daykeeper-messenger>` element and is unaffected by page CSS.
   replies show their photo. A gateway without the route (404), a failure or a
   malformed answer leaves all of this out: the monogram stays and no line is
   shown.
+- **Logo.** When the web client has a logo (server contract 1.13.0), the
+  exchange's `inbox.logoUrl` names it and the messenger draws it, fitted on a
+  light disc, wherever it would show the inbox's initial: the topbar, the
+  thread intro, conversation rows without an assignee, and AI-agent replies.
+  On home it stays in the topbar even when the team's faces are shown below.
+  Only an https (or loopback http) URL is used, it is requested with
+  `referrerpolicy="no-referrer"`, and one that fails to load leaves the
+  initial. Older servers send no `logoUrl`, and nothing changes.
 - **Device context.** Gateway requests (conversations, messages, unread,
   seen, `/v1/messenger`) carry a `Daykeeper-Client` header so agents see the
   visitor's browser on the contact: base64url JSON with platform `web`, OS

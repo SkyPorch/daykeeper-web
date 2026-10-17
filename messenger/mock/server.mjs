@@ -34,6 +34,8 @@ const defaultConfig = () => ({
     name: "Fern & Field",
     greeting: "Hi there. Ask us anything about your order, sizing or returns.",
     accentColor: null,
+    // A synthetic logo slug (see LOGOS), sent as `logoUrl`; null for none.
+    logo: null,
   },
   agentName: "Fern",
   humanName: "Maya Chen",
@@ -71,6 +73,10 @@ const AVATARS = {
 };
 const avatarSvg = ([ink, paper]) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" fill="${paper}"/><circle cx="48" cy="38" r="17" fill="${ink}"/><path d="M14 96c2-22 16-34 34-34s32 12 34 34Z" fill="${ink}"/></svg>`;
+// Synthetic company logos, standing in for the CDN's /web-client-logos/.
+const LOGOS = {
+  fern: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M32 6C18 18 14 34 20 48c4 9 10 12 12 12s8-3 12-12c6-14 2-30-12-42Z" fill="#2f7a4f"/><path d="M32 14v44M32 26l-8-6M32 34l-10-7M32 42l-10-6M32 26l8-6M32 34l10-7M32 42l10-6" stroke="#e9f4ec" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>`,
+};
 const sha256 = (text) => createHash("sha256").update(text).digest();
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -250,6 +256,17 @@ export async function startMock({
           "x-content-type-options": "nosniff",
         });
         return response.end(avatarSvg(colours));
+      }
+      const logoMatch = url.pathname.match(/^\/logos\/([a-z]+)\.svg$/);
+      if (logoMatch && request.method === "GET") {
+        const logo = LOGOS[logoMatch[1]];
+        if (!logo) return send(response, 404, { error: "not_found" });
+        response.writeHead(200, {
+          "content-type": "image/svg+xml",
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+        });
+        return response.end(logo);
       }
       if (!url.pathname.startsWith("/__mock/")) {
         requests.push({
@@ -557,7 +574,15 @@ export async function startMock({
           expiresAt: new Date(exp * 1000).toISOString(),
           gatewayUrl: gatewayUrl,
           visitor: secret ? { id: visitorId, secret } : { id: visitorId },
-          inbox: config.inbox,
+          inbox: {
+            name: config.inbox.name,
+            greeting: config.inbox.greeting,
+            accentColor: config.inbox.accentColor,
+            logoUrl:
+              config.inbox.logo && LOGOS[config.inbox.logo]
+                ? `${gatewayUrl}/logos/${config.inbox.logo}.svg`
+                : null,
+          },
         },
       },
       headers,

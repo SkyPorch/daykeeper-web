@@ -361,6 +361,44 @@ export const css = String.raw`
   font-size: 26px;
 }
 
+/* The company logo in place of the initial, fitted on a light disc so dark,
+   transparent and wordmark logos all read. The image stays invisible over
+   the initial until it has loaded (.logo); one that never loads leaves the
+   initial. A mark that is only there for its logo (.logo-only) shows once it
+   has one. */
+.monogram {
+  position: relative;
+  overflow: hidden;
+}
+
+.monogram.logo {
+  background: #fff;
+  color: transparent;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.monogram.logo-only:not(.logo) {
+  display: none;
+}
+
+.monogram > img {
+  visibility: hidden;
+}
+
+.monogram.logo > img {
+  visibility: visible;
+}
+
+.monogram img {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 14%;
+  object-fit: contain;
+}
+
 .monogram.person {
   background: var(--surface-2);
   color: var(--text);
