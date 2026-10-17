@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Hosted messenger: the company logo. The visitor-session exchange's optional
+  `inbox.logoUrl` (Daykeeper server contract 1.13.0) replaces the inbox's
+  initial in the topbar, thread intro, unassigned conversation rows and
+  AI-agent replies, and stays in the home topbar beside the team. A logo that
+  the page's CSP blocks, or that fails to load, falls back to the initial.
+  Sites with a strict CSP add `img-src https://cdn.mydaykeeper.com`. The
+  headless `@skyporch/daykeeper-web` package is unchanged.
+
 ## 0.3.0 — 2026-10-15
 
 ### Added

@@ -81,8 +81,49 @@ test("mints a visitor on first exchange and stores the secret once", async () =>
     name: "Example",
     greeting: "Hello",
     accentColor: "#1a2b3c",
+    logoUrl: null,
   });
   assert.ok(clock.now);
+});
+
+test("takes the inbox's logo only as an https (or loopback) URL", async () => {
+  const logo = `https://cdn.mydaykeeper.com/web-client-logos/${"ab".repeat(32)}`;
+  for (const [logoUrl, expected] of [
+    [logo, logo],
+    ["http://127.0.0.1:4000/logo.png", "http://127.0.0.1:4000/logo.png"],
+    ["http://cdn.example.test/logo.png", null],
+    ["javascript:alert(1)", null],
+    ["data:image/svg+xml;base64,PHN2Zy8+", null],
+    [`https://user:pass@cdn.example.test/logo.png`, null],
+    ["x".repeat(3000), null],
+    ["http://localhost:4000/logo.png", "http://localhost:4000/logo.png"],
+    ["http://[::1]:4000/logo.png", "http://[::1]:4000/logo.png"],
+    [42, null],
+    [null, null],
+    ["", null],
+    ["/logo.png", null],
+    ["blob:https://example.test/1", null],
+    [undefined, null],
+  ] as const) {
+    const { session } = harness(() =>
+      Response.json(
+        grantBody({ id: V1, secret: S1 }, iso(1_800_000_300_000), {
+          inbox: {
+            name: "Example",
+            greeting: null,
+            accentColor: null,
+            logoUrl,
+          },
+        }),
+        { status: 201 },
+      ),
+    );
+    assert.equal(
+      (await session.ensure()).inbox.logoUrl,
+      expected,
+      String(logoUrl),
+    );
+  }
 });
 
 test("resumes a stored visitor without rewriting storage", async () => {

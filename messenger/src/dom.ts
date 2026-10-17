@@ -135,6 +135,65 @@ export function avatar(
   return span;
 }
 
+/**
+ * The inbox's round mark: the name's initial on the accent, replaced by the
+ * company logo on a light disc once the logo has loaded. A logo that is slow,
+ * blocked by the host page's CSP, gone or offline leaves the initial. Rebuilds
+ * only when the name or logo changed; events from an image a rebuild already
+ * dropped are ignored.
+ */
+export function markInto(
+  doc: Document,
+  mark: HTMLElement,
+  name: string,
+  logoUrl: string | null,
+): void {
+  const letter = initial(name || "D");
+  const key = `${letter}\u0000${logoUrl ?? ""}`;
+  if (mark.dataset.mark === key) return;
+  mark.dataset.mark = key;
+  mark.classList.remove("logo");
+  mark.replaceChildren(letter);
+  if (!logoUrl) return;
+  const img = h(doc, "img", {
+    alt: "",
+    referrerpolicy: "no-referrer",
+    decoding: "async",
+    draggable: "false",
+  });
+  img.addEventListener(
+    "load",
+    () => {
+      if (img.parentNode === mark) mark.classList.add("logo");
+    },
+    { once: true },
+  );
+  img.addEventListener(
+    "error",
+    () => {
+      if (img.parentNode === mark) img.remove();
+    },
+    { once: true },
+  );
+  img.src = logoUrl;
+  mark.append(img);
+}
+
+/** A new inbox mark; see markInto. */
+export function inboxMark(
+  doc: Document,
+  name: string,
+  logoUrl: string | null,
+  className = "",
+): HTMLSpanElement {
+  const mark = h(doc, "span", {
+    class: `monogram${className ? ` ${className}` : ""}`,
+    "aria-hidden": "true",
+  });
+  markInto(doc, mark, name, logoUrl);
+  return mark;
+}
+
 /** Up to three overlapping avatars, each tucked under the next. */
 export function avatarStack(
   doc: Document,

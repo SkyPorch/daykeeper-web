@@ -7,7 +7,7 @@ import {
   type MessengerState,
   type ThreadMessage,
 } from "./controller.ts";
-import { avatar, avatarStack, h, icon, initial } from "./dom.ts";
+import { avatar, avatarStack, h, icon, inboxMark, markInto } from "./dom.ts";
 import type { MessengerErrorCode } from "./errors.ts";
 import { renderRichText } from "./richText.ts";
 import type { TeamMember } from "./profile.ts";
@@ -360,8 +360,14 @@ export class MessengerView {
     }
     // Home shows the team large under the topbar; once is enough.
     this.#stack.hidden = team.length === 0 || s.view === "home";
-    this.#monogram.textContent = initial(name || "D");
-    this.#monogram.hidden = !name || team.length > 0;
+    const logo = s.inbox?.logoUrl ?? null;
+    markInto(this.#doc, this.#monogram, name, logo);
+    // The team's faces stand in for the mark in a thread; on home, where they
+    // sit under the topbar, a logo that loads stays beside the name (and an
+    // initial never does).
+    const logoOnly = team.length > 0 && Boolean(logo) && s.view === "home";
+    this.#monogram.classList.toggle("logo-only", logoOnly);
+    this.#monogram.hidden = !name || (team.length > 0 && !logoOnly);
     const inThread =
       s.view === "thread" && s.phase !== "error" && s.phase !== "connecting";
     this.#panel.classList.toggle("view-thread", inThread);
@@ -582,18 +588,16 @@ export class MessengerView {
       const dot = button.querySelector(".dot") as HTMLElement;
       // The person on the thread, when there is one; else the inbox.
       const slot = button.querySelector(".row-avatar") as HTMLElement;
-      const slotKey = who ? `p:${teamKey([who])}` : `i:${name}`;
+      const logo = this.#c.state.inbox?.logoUrl ?? null;
+      const slotKey = who
+        ? `p:${teamKey([who])}`
+        : `i:${name}\u0000${logo ?? ""}`;
       if (slot.dataset.who !== slotKey) {
         slot.dataset.who = slotKey;
         slot.replaceChildren(
           who
             ? avatar(this.#doc, who.name, who.avatarUrl)
-            : h(
-                this.#doc,
-                "span",
-                { class: "monogram", "aria-hidden": "true" },
-                initial(name || "D"),
-              ),
+            : inboxMark(this.#doc, name, logo),
         );
       }
       preview.textContent =
@@ -796,12 +800,7 @@ export class MessengerView {
       const name = this.#nameFor(message);
       author.append(
         message.author === "agent"
-          ? h(
-              d,
-              "span",
-              { class: "monogram small", "aria-hidden": "true" },
-              initial(name),
-            )
+          ? inboxMark(d, name, this.#c.state.inbox?.logoUrl ?? null, "small")
           : avatar(d, name, message.senderAvatarUrl, "small"),
         h(d, "span", { class: "author-name" }, name),
       );
@@ -933,18 +932,16 @@ export class MessengerView {
     if (!slot) return;
     const team = s.profile.team;
     const name = s.inbox?.name ?? "";
-    const key = team.length ? `t:${teamKey(team)}` : `i:${name}`;
+    const logo = s.inbox?.logoUrl ?? null;
+    const key = team.length
+      ? `t:${teamKey(team)}`
+      : `i:${name}\u0000${logo ?? ""}`;
     if (slot.dataset.team !== key) {
       slot.dataset.team = key;
       slot.replaceChildren(
         team.length
           ? avatarStack(this.#doc, team, "large")
-          : h(
-              this.#doc,
-              "span",
-              { class: "monogram large", "aria-hidden": "true" },
-              initial(name || "D"),
-            ),
+          : inboxMark(this.#doc, name, logo, "large"),
       );
     }
     this.#syncReply(this.#introReply!, s);
